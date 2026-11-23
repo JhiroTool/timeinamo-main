@@ -1,6 +1,7 @@
 import { X } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import type { StyleProp, TextStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, layout, radius, spacing, typography } from '@/theme';
@@ -11,6 +12,8 @@ interface BottomSheetProps {
   children: ReactNode;
   onDismiss: () => void;
   dismissDisabled?: boolean;
+  scrollable?: boolean;
+  titleStyle?: StyleProp<TextStyle>;
 }
 
 export function BottomSheet({
@@ -19,7 +22,11 @@ export function BottomSheet({
   children,
   onDismiss,
   dismissDisabled = false,
+  scrollable = false,
+  titleStyle,
 }: BottomSheetProps) {
+  const { height } = useWindowDimensions();
+
   return (
     <Modal
       animationType="slide"
@@ -39,12 +46,12 @@ export function BottomSheet({
         />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardContainer}
+          style={[styles.keyboardContainer, scrollable && styles.scrollableContainer]}
         >
-          <SafeAreaView edges={['bottom']} style={styles.sheet}>
+          <SafeAreaView edges={['bottom']} style={[styles.sheet, scrollable && { maxHeight: height * 0.9 }]}>
             <View style={styles.handle} />
             <View style={styles.header}>
-              <Text accessibilityRole="header" style={styles.title}>
+              <Text accessibilityRole="header" style={[styles.title, titleStyle]}>
                 {title}
               </Text>
               <Pressable
@@ -58,7 +65,11 @@ export function BottomSheet({
                 <X color={colors.textSecondary} size={22} />
               </Pressable>
             </View>
-            {children}
+            {scrollable ? (
+              <ScrollView bounces={false} keyboardShouldPersistTaps="handled" style={styles.body}>
+                {children}
+              </ScrollView>
+            ) : children}
           </SafeAreaView>
         </KeyboardAvoidingView>
       </View>
@@ -75,6 +86,8 @@ const styles = StyleSheet.create({
   keyboardContainer: {
     justifyContent: 'flex-end',
   },
+  scrollableContainer: { flexShrink: 1 },
+  body: { flexGrow: 0, flexShrink: 1 },
   sheet: {
     maxHeight: '88%',
     paddingHorizontal: spacing.lg,

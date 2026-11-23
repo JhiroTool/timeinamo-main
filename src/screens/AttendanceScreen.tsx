@@ -1,421 +1,272 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import {
-  CalendarClock,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  FilePenLine,
-  Plus,
-} from 'lucide-react-native';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { ChevronRight, Clock3, Plus } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Badge, Button, Card, EmptyState, GradientHeader, LoadingState, Screen } from '@/components/ui';
-import type { AttendanceHistoryFilter } from '@/database/repositories';
+import type { AttendanceHistoryFilter, AttendanceHistoryRecord } from '@/database/repositories';
+import { AttendanceCalendar } from '@/features/attendance/AttendanceCalendar';
+import { formatAttendanceDate, formatAttendanceHours, shiftAttendanceMonth } from '@/features/attendance/attendancePresentation';
 import { useAttendance } from '@/features/attendance/useAttendance';
 import { useAttendanceHistory } from '@/features/attendance/useAttendanceHistory';
 import { useSetup } from '@/features/setup/useSetup';
-import { formatDuration } from '@/services/attendanceCalculations.js';
-import { colors, layout, radius, spacing, typography } from '@/theme';
+import { colors, fontFamilies, layout, radius, spacing } from '@/theme';
 import { toWorkDate } from '@/utils/time';
 
-const filters: Array<{ label: string; value: AttendanceHistoryFilter }> = [
+const filters = [
   { label: 'All', value: 'all' },
   { label: 'Completed', value: 'completed' },
   { label: 'Incomplete', value: 'incomplete' },
   { label: 'Adjusted', value: 'adjusted' },
-];
+] as const;
 
-function shiftMonth(month: string, amount: number): string {
-  const year = Number(month.slice(0, 4));
-  const monthIndex = Number(month.slice(5, 7)) - 1;
-  const next = new Date(Date.UTC(year, monthIndex + amount, 1));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`;
-}
+const shortDate = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+const fullDate = { weekday: 'long', month: 'long', day: 'numeric' } as const;
 
-function formatMonth(month: string): string {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
-    new Date(`${month}-01T00:00:00.000Z`),
+function InlineAction({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress}
+      style={({ pressed }) => [styles.inlineAction, pressed && styles.pressed]}>
+      <Text style={styles.link}>{label}</Text>
+    </Pressable>
   );
 }
 
-function formatWorkDate(workDate: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${workDate}T00:00:00.000Z`));
-}
-
-function formatTime(value: string | null, timezone: string, hour12: boolean): string {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12,
-  }).format(new Date(value));
+function RecordRow({ record, timeRange, title, onPress }: {
+  record: AttendanceHistoryRecord;
+  timeRange: string;
+  title: string;
+  onPress: () => void;
+}) {
+  const completed = record.status === 'completed';
+  return (
+    <Pressable accessibilityRole="button" accessibilityHint="Opens attendance details" onPress={onPress}
+      style={({ pressed }) => [styles.record, pressed && styles.pressed]}>
+      <View style={styles.recordCopy}>
+        <Text style={styles.recordTitle}>{title}</Text>
+        <Text style={styles.timeRange}>{timeRange}</Text>
+      </View>
+      <View style={styles.recordTotals}>
+        <Text style={styles.recordHours}>{completed ? formatAttendanceHours(record.workedDurationSeconds ?? 0) : '—'}</Text>
+        <Text style={[styles.recordStatus, !completed && styles.warning]}>{completed ? 'Completed' : 'Incomplete'}</Text>
+        {record.isAdjusted ? <Text style={styles.adjusted}>Adjusted</Text> : null}
+      </View>
+      <ChevronRight color={colors.textMuted} size={16} />
+    </Pressable>
+  );
 }
 
 export function AttendanceScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { data: setup } = useSetup();
   const { activeSession } = useAttendance();
   const timezone = setup?.workSettings.timezone ?? 'Asia/Manila';
-  const currentMonth = toWorkDate(new Date(), timezone).slice(0, 7);
-  const [month, setMonth] = useState(currentMonth);
+  const today = toWorkDate(new Date(), timezone);
+  const currentMonth = today.slice(0, 7);
+  const [selectedDate, setSelectedDate] = useState<string>(today);
   const [filter, setFilter] = useState<AttendanceHistoryFilter>('all');
-  const { status, result, error, load } = useAttendanceHistory(month, filter);
+  const month = selectedDate.slice(0, 7);
+  const { status, result, hasResult, load } = useAttendanceHistory(month);
   const hour12 = setup?.workSettings.timeFormat !== '24h';
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  const emptyDescription = useMemo(() => {
-    if (filter === 'all') return 'No attendance records exist for this month.';
-    return `No ${filter} attendance records exist for this month.`;
-  }, [filter]);
+  const recordsByDate = useMemo(() => new Map<string, AttendanceHistoryRecord>(
+    result.records.map((record) => [record.workDate, record]),
+  ), [result.records]);
+  const visibleRecords = useMemo(() => result.records.filter((record) => {
+    if (filter === 'completed') return record.status === 'completed';
+    if (filter === 'incomplete') return record.status !== 'completed';
+    if (filter === 'adjusted') return record.isAdjusted;
+    return true;
+  }), [filter, result.records]);
+  const selectedRecord = recordsByDate.get(selectedDate);
+  const timeFormatter = useMemo(() => new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12,
+  }), [timezone, hour12]);
+
+  function formatTimeRange(record: AttendanceHistoryRecord) {
+    const start = timeFormatter.format(new Date(record.clockInAt));
+    const end = record.clockOutAt ? timeFormatter.format(new Date(record.clockOutAt)) : '—';
+    return `${start} – ${end}`;
+  }
+
+  function moveMonth(offset: number) {
+    const next = shiftAttendanceMonth(month, offset);
+    setSelectedDate(next === currentMonth ? today : `${next}-01`);
+  }
+
+  function openRecord(id: number) {
+    router.push({ pathname: '/attendance/[id]', params: { id: String(id) } });
+  }
+
+  function addRecord(date?: string) {
+    router.push({ pathname: '/attendance/manual', params: date ? { date } : {} });
+  }
+
+  const timerAction = activeSession ? 'Work Session' : 'Time In';
+  const loading = status === 'loading' && !hasResult;
 
   return (
-    <Screen branded>
-      <GradientHeader
-        compact
-        eyebrow="WORK RECORDS"
-        subtitle="Track your daily work records"
-        title="Attendance"
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
+      {isFocused ? <StatusBar style="dark" /> : null}
+      <FlatList
+        data={visibleRecords}
+        keyExtractor={(record) => String(record.id)}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="never"
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <RecordRow record={item} timeRange={formatTimeRange(item)}
+            title={formatAttendanceDate(item.workDate, shortDate)}
+            onPress={() => openRecord(item.id)} />
+        )}
+        ListHeaderComponent={
+          <>
+            <View style={styles.header}>
+              <View style={styles.headerRow}>
+                <Text accessibilityRole="header" style={styles.title}>Attendance</Text>
+                <View style={styles.headerActions}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={timerAction}
+                    onPress={() => router.push('/attendance/active')}
+                    style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+                    <Clock3 color={colors.primaryDark} size={21} />
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Add Record"
+                    onPress={() => addRecord()} style={({ pressed }) => [styles.iconButton, styles.addButton, pressed && styles.pressed]}>
+                    <Plus color={colors.primaryDark} size={24} />
+                  </Pressable>
+                </View>
+              </View>
+              <Text style={styles.support}>Your workdays, all in one place.</Text>
+            </View>
+            <View accessibilityLiveRegion="polite" accessibilityState={{ busy: loading }} style={styles.summary}>
+              <View style={styles.featuredMetric}>
+                {loading ? <View style={[styles.skeleton, styles.hoursSkeleton]} /> : (
+                  <Text style={styles.monthlyHours}>{hasResult ? formatAttendanceHours(result.summary.creditedSeconds) : '—'}</Text>
+                )}
+                <Text style={styles.support}>Hours completed this month</Text>
+              </View>
+              <View style={styles.summaryStats}>
+                <Text style={styles.support}>
+                  <Text style={styles.statValue}>{hasResult ? result.summary.completedWorkdays : '—'}</Text>
+                  {result.summary.completedWorkdays === 1 ? ' Workday' : ' Workdays'}
+                </Text>
+                <Text style={styles.support}>
+                  <Text style={styles.statValue}>{hasResult ? result.summary.incompleteCount : '—'}</Text>
+                  {result.summary.incompleteCount === 1 ? ' Incomplete record' : ' Incomplete records'}
+                </Text>
+              </View>
+            </View>
+            <AttendanceCalendar month={month} today={today} selectedDate={selectedDate}
+              recordsByDate={recordsByDate} onSelect={setSelectedDate}
+              onPrevious={() => moveMonth(-1)} onNext={month < currentMonth ? () => moveMonth(1) : undefined} />
+
+            <View style={styles.selectedDay}>
+              <Text accessibilityRole="header" style={styles.selectedTitle}>{formatAttendanceDate(selectedDate, fullDate)}</Text>
+              {selectedRecord ? (
+                <RecordRow record={selectedRecord} title="View record" timeRange={formatTimeRange(selectedRecord)}
+                  onPress={() => openRecord(selectedRecord.id)} />
+              ) : hasResult ? (
+                <View style={styles.selectedEmpty}>
+                  <Text style={[styles.support, styles.selectedCopy]}>
+                    {selectedDate > today ? 'This workday is in the future.' : 'No attendance recorded for this date.'}
+                  </Text>
+                  {selectedDate <= today ? <InlineAction label="Add record" onPress={() => addRecord(selectedDate)} /> : null}
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.historyHeader}>
+              <Text accessibilityRole="header" style={styles.sectionTitle}>Attendance History</Text>
+              <View accessibilityRole="radiogroup" accessibilityLabel="Filter attendance history" style={styles.filters}>
+                {filters.map((item) => (
+                  <Pressable key={item.value} accessibilityRole="radio" accessibilityState={{ checked: filter === item.value }}
+                    onPress={() => setFilter(item.value)}
+                    style={({ pressed }) => [styles.filter, filter === item.value && styles.filterSelected, pressed && styles.pressed]}>
+                    <Text style={[styles.filterLabel, filter === item.value && styles.filterLabelSelected]}>{item.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <View accessible accessibilityLabel="Loading attendance" accessibilityState={{ busy: true }} style={styles.empty}>
+              <View style={[styles.skeleton, styles.rowSkeleton]} />
+              <View style={[styles.skeleton, styles.shortSkeleton]} />
+            </View>
+          ) : status === 'error' ? (
+            <View accessibilityLiveRegion="polite" style={styles.empty}>
+              <Text style={styles.emptyTitle}>Attendance couldn’t be loaded.</Text>
+              <InlineAction label="Retry" onPress={() => void load()} />
+            </View>
+          ) : result.records.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No attendance records this month.</Text>
+              <Text style={styles.support}>Your recorded workdays will appear here.</Text>
+              <InlineAction label="Add record" onPress={() => addRecord(selectedDate <= today ? selectedDate : undefined)} />
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No records match this filter.</Text>
+              <InlineAction label="Reset filter" onPress={() => setFilter('all')} />
+            </View>
+          )
+        }
       />
-      <View style={styles.content}>
-
-      <View style={styles.actions}>
-        <Button
-          icon={activeSession ? Clock3 : CalendarClock}
-          onPress={() => router.push('/attendance/active')}
-          title={activeSession ? 'Active timer' : 'Time In'}
-          variant="secondary"
-        />
-        <Button
-          icon={Plus}
-          onPress={() => router.push('/attendance/manual')}
-          title="Manual entry"
-          variant="outline"
-        />
-      </View>
-
-      <View style={styles.monthNavigator}>
-        <Pressable
-          accessibilityLabel="Previous month"
-          accessibilityRole="button"
-          onPress={() => setMonth((value) => shiftMonth(value, -1))}
-          style={({ pressed }) => [styles.monthButton, pressed && styles.pressed]}
-        >
-          <ChevronLeft color={colors.text} size={22} />
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.monthTitle}>
-          {formatMonth(month)}
-        </Text>
-        <Pressable
-          accessibilityLabel="Next month"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: month >= currentMonth }}
-          disabled={month >= currentMonth}
-          onPress={() => setMonth((value) => shiftMonth(value, 1))}
-          style={({ pressed }) => [
-            styles.monthButton,
-            month >= currentMonth && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <ChevronRight color={colors.text} size={22} />
-        </Pressable>
-      </View>
-
-      <View accessibilityRole="radiogroup" style={styles.filters}>
-        {filters.map((item) => {
-          const selected = filter === item.value;
-          return (
-            <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              key={item.value}
-              onPress={() => setFilter(item.value)}
-              style={({ pressed }) => [
-                styles.filter,
-                selected && styles.filterSelected,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.filterLabel, selected && styles.filterLabelSelected]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={styles.summaryGrid}>
-        <Card style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{formatDuration(result.summary.creditedSeconds)}</Text>
-          <Text style={styles.summaryLabel}>Credited hours</Text>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{result.summary.completedWorkdays}</Text>
-          <Text style={styles.summaryLabel}>Completed days</Text>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{result.summary.incompleteCount}</Text>
-          <Text style={styles.summaryLabel}>Incomplete</Text>
-        </Card>
-      </View>
-
-      {status === 'loading' ? <LoadingState label="Loading monthly attendance…" /> : null}
-      {status === 'error' ? (
-        <View style={styles.errorState}>
-          <Text style={styles.errorText}>{error?.message ?? 'History could not be loaded.'}</Text>
-          <Button onPress={() => void load()} title="Try again" variant="ghost" />
-        </View>
-      ) : null}
-
-      {status === 'ready' && result.records.length === 0 ? (
-        <Card style={styles.emptyCard}>
-          <EmptyState
-            compact
-            description={emptyDescription}
-            icon={CalendarClock}
-            title="No matching records"
-          />
-        </Card>
-      ) : null}
-
-      {status === 'ready' ? (
-        <View style={styles.records}>
-          {result.records.map((record) => (
-            <Pressable
-              accessibilityLabel={`View attendance for ${record.workDate}`}
-              accessibilityRole="button"
-              key={record.id}
-              onPress={() =>
-                router.push({ pathname: '/attendance/[id]', params: { id: String(record.id) } })
-              }
-              style={({ pressed }) => pressed && styles.recordPressed}
-            >
-              <Card style={styles.recordCard}>
-                <View style={styles.recordHeader}>
-                  <View>
-                    <Text style={styles.recordDate}>{formatWorkDate(record.workDate)}</Text>
-                    <Text style={styles.recordSource}>
-                      {record.entrySource === 'manual' ? 'Manual entry' : 'Timer entry'}
-                    </Text>
-                  </View>
-                  <Badge
-                    icon={record.isAdjusted ? FilePenLine : undefined}
-                    label={
-                      record.isAdjusted
-                        ? 'Adjusted'
-                        : record.status === 'completed'
-                          ? 'Completed'
-                          : 'Incomplete'
-                    }
-                    tone={record.isAdjusted ? 'primary' : record.status === 'completed' ? 'success' : 'warning'}
-                  />
-                </View>
-                <View style={styles.timeRow}>
-                  <View style={styles.timeMetric}>
-                    <Text style={styles.metricLabel}>Time In</Text>
-                    <Text style={styles.metricValue}>
-                      {formatTime(record.clockInAt, timezone, hour12)}
-                    </Text>
-                  </View>
-                  <View style={styles.timeMetric}>
-                    <Text style={styles.metricLabel}>Time Out</Text>
-                    <Text style={styles.metricValue}>
-                      {formatTime(record.clockOutAt, timezone, hour12)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.recordFooter}>
-                  <Text style={styles.footerText}>
-                    Break {formatDuration(record.breakDurationSeconds)}
-                  </Text>
-                  <Text style={styles.creditedText}>
-                    {record.status === 'completed'
-                      ? `${formatDuration(record.workedDurationSeconds ?? 0)} credited`
-                      : 'Not credited'}
-                  </Text>
-                </View>
-              </Card>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-      </View>
-    </Screen>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    marginTop: -36,
-  },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-  },
-  monthNavigator: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.lg,
-  },
-  monthButton: {
-    width: layout.minimumTouchTarget,
-    height: layout.minimumTouchTarget,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-  },
-  monthTitle: {
-    color: colors.text,
-    textAlign: 'center',
-    ...typography.heading,
-  },
-  disabled: {
-    opacity: 0.35,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  filters: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  filter: {
-    minHeight: layout.minimumTouchTarget,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-  },
-  filterSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterLabel: {
-    color: colors.textSecondary,
-    ...typography.label,
-  },
-  filterLabelSelected: {
-    color: colors.surface,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  summaryCard: {
-    minWidth: 150,
-    flex: 1,
-    padding: spacing.md,
-  },
-  summaryValue: {
-    color: colors.text,
-    ...typography.heading,
-    fontVariant: ['tabular-nums'],
-  },
-  summaryLabel: {
-    marginTop: spacing.xxs,
-    color: colors.textSecondary,
-    ...typography.caption,
-  },
-  records: {
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  recordCard: {
-    gap: spacing.md,
-  },
-  recordPressed: {
-    opacity: 0.76,
-  },
-  recordHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  recordDate: {
-    color: colors.text,
-    ...typography.subheading,
-  },
-  recordSource: {
-    marginTop: spacing.xxs,
-    color: colors.textSecondary,
-    ...typography.caption,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
-  timeMetric: {
-    flex: 1,
-  },
-  metricLabel: {
-    color: colors.textSecondary,
-    ...typography.caption,
-  },
-  metricValue: {
-    marginTop: spacing.xxs,
-    color: colors.text,
-    ...typography.bodyStrong,
-  },
-  recordFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  footerText: {
-    color: colors.textSecondary,
-    ...typography.caption,
-  },
-  creditedText: {
-    color: colors.primaryDark,
-    ...typography.label,
-    fontVariant: ['tabular-nums'],
-  },
-  emptyCard: {
-    marginTop: spacing.lg,
-  },
-  errorState: {
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.md,
-  },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    ...typography.body,
-  },
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', paddingHorizontal: 20, paddingTop: spacing.xs, paddingBottom: spacing.xl },
+  header: { marginBottom: spacing.md },
+  headerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: spacing.xs, rowGap: spacing.xxs },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
+  title: { flexShrink: 1, color: colors.text, fontFamily: fontFamilies.heading, fontSize: 28, lineHeight: 35, letterSpacing: -0.7 },
+  iconButton: { width: layout.minimumTouchTarget, height: layout.minimumTouchTarget, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  addButton: { backgroundColor: colors.primarySoft },
+  support: { color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 13, lineHeight: 19 },
+  summary: { marginBottom: spacing.md, padding: spacing.sm, borderWidth: 1, borderColor: '#DBEAE7', borderRadius: radius.lg, backgroundColor: '#F0F8F6' },
+  featuredMetric: { gap: 2 },
+  monthlyHours: { color: colors.primaryDark, fontFamily: fontFamilies.heading, fontSize: 30, lineHeight: 38, letterSpacing: -0.8, fontVariant: ['tabular-nums'] },
+  summaryStats: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.xxs, marginTop: spacing.xs, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#C8DEDB' },
+  statValue: { color: colors.text, fontFamily: fontFamilies.label, fontVariant: ['tabular-nums'] },
+  selectedDay: { paddingTop: spacing.sm, marginTop: spacing.xs },
+  selectedTitle: { color: colors.text, fontFamily: fontFamilies.headingSemibold, fontSize: 16, lineHeight: 23 },
+  selectedEmpty: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.xs, paddingTop: spacing.xxs },
+  selectedCopy: { flexGrow: 1, flexBasis: 155 },
+  inlineAction: { minHeight: layout.minimumTouchTarget, justifyContent: 'center', alignSelf: 'flex-start' },
+  link: { color: colors.primaryDark, fontFamily: fontFamilies.label, fontSize: 13, lineHeight: 19 },
+  historyHeader: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, gap: spacing.xs },
+  sectionTitle: { color: colors.text, fontFamily: fontFamilies.heading, fontSize: 20, lineHeight: 27, letterSpacing: -0.35 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.xxs, columnGap: spacing.sm, rowGap: spacing.xxs },
+  filter: { minHeight: 44, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', paddingHorizontal: 2 },
+  filterSelected: { borderBottomColor: colors.primary },
+  filterLabel: { color: colors.textSecondary, fontFamily: fontFamilies.bodyMedium, fontSize: 12, lineHeight: 18 },
+  filterLabelSelected: { color: colors.primaryDark, fontFamily: fontFamilies.label },
+  record: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingVertical: spacing.sm },
+  recordCopy: { flex: 1, minWidth: 0, gap: 2 },
+  recordTitle: { color: colors.text, fontFamily: fontFamilies.label, fontSize: 14, lineHeight: 20 },
+  timeRange: { color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 13, lineHeight: 19, fontVariant: ['tabular-nums'] },
+  recordTotals: { maxWidth: '44%', alignItems: 'flex-end' },
+  recordHours: { color: colors.text, fontFamily: fontFamilies.headingSemibold, fontSize: 15, lineHeight: 21, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  recordStatus: { color: colors.primaryDark, fontFamily: fontFamilies.bodyMedium, fontSize: 12, lineHeight: 18, textAlign: 'right' },
+  warning: { color: colors.warning },
+  adjusted: { color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 11, lineHeight: 16, textAlign: 'right' },
+  empty: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingVertical: spacing.sm, gap: spacing.xxs },
+  emptyTitle: { color: colors.text, fontFamily: fontFamilies.label, fontSize: 14, lineHeight: 20 },
+  skeleton: { height: 14, borderRadius: radius.sm, backgroundColor: '#DDECE9' },
+  hoursSkeleton: { height: 28, width: 112, marginVertical: 5 },
+  rowSkeleton: { width: '48%', marginBottom: spacing.xxs },
+  shortSkeleton: { width: '32%' },
+  pressed: { opacity: 0.65 },
 });
-

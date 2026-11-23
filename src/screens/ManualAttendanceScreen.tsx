@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router';
-import { Save } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { Button, Card, Dialog, GradientHeader, LoadingState, Screen, TextField } from '@/components/ui';
+import { Button, Dialog, LoadingState, Screen, TextField } from '@/components/ui';
+import { DatabaseOperationError } from '@/database/errors';
 import { AttendanceHistoryRepository } from '@/database/repositories';
+import { AttendancePageHeader } from '@/features/attendance/AttendancePageHeader';
+import { formatAttendanceHours } from '@/features/attendance/attendancePresentation';
 import { useAttendance } from '@/features/attendance/useAttendance';
 import { DateTimeField } from '@/features/setup/DateTimeField';
 import {
@@ -17,14 +19,24 @@ import {
 } from '@/features/attendance/manualAttendanceSchema';
 import { useSetup } from '@/features/setup/useSetup';
 import { useDatabase } from '@/hooks/useDatabase';
-import { calculateAttendanceDurations, formatDuration } from '@/services/attendanceCalculations.js';
-import { colors, radius, spacing, typography } from '@/theme';
+import { calculateAttendanceDurations } from '@/services/attendanceCalculations.js';
+import { colors, fontFamilies, radius, spacing } from '@/theme';
 import type { AttendanceSession } from '@/types/models';
 import { getZonedDateTimeParts, parseWorkDate, toUtcTimestamp, zonedDateTimeToUtc } from '@/utils/time';
 
+function initialWorkDate(date: string | undefined, today: string): string {
+  if (typeof date !== 'string' || date > today) return today;
+  try {
+    return parseWorkDate(date);
+  } catch {
+    return today;
+  }
+}
+
 export function ManualAttendanceScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const { fontScale } = useWindowDimensions();
+  const params = useLocalSearchParams<{ id?: string; date?: string }>();
   const sessionId = params.id ? Number(params.id) : null;
   const editing = Number.isSafeInteger(sessionId) && sessionId !== null;
   const database = useDatabase();
@@ -48,7 +60,7 @@ export function ManualAttendanceScreen() {
     reset,
   } = useForm<ManualAttendanceFormValues>({
     defaultValues: {
-      workDate: nowParts.date,
+      workDate: initialWorkDate(params.date, nowParts.date),
       timeIn: setup
         ? `${String(Math.floor(setup.workSettings.workStartMinutes / 60)).padStart(2, '0')}:${String(setup.workSettings.workStartMinutes % 60).padStart(2, '0')}`
         : '08:00',
@@ -71,6 +83,7 @@ export function ManualAttendanceScreen() {
     if (!editing || sessionId === null) return;
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     repository.getDetails(sessionId).then(
       (details) => {
         if (cancelled) return;
@@ -82,9 +95,9 @@ export function ManualAttendanceScreen() {
         }
         setLoading(false);
       },
-      (reason: unknown) => {
+      () => {
         if (cancelled) return;
-        setLoadError(reason instanceof Error ? reason.message : 'Attendance could not be loaded.');
+        setLoadError('Attendance could not be loaded.');
         setLoading(false);
       },
     );
@@ -124,9 +137,12 @@ export function ManualAttendanceScreen() {
       await refreshAttendance();
       reset(formValues);
       disablePrevention();
-      router.replace({ pathname: '/attendance/[id]', params: { id: String(saved.id) } });
+      const destination = { pathname: '/attendance/[id]' as const, params: { id: String(saved.id) } };
+      if (editing) router.dismissTo(destination);
+      else router.replace(destination);
     } catch (reason) {
-      setSaveError(reason instanceof Error ? reason.message : 'Attendance could not be saved.');
+      setSaveError(reason instanceof DatabaseOperationError || reason instanceof RangeError
+        ? reason.message : 'Attendance could not be saved. Please try again.');
     }
   });
 
@@ -137,32 +153,22 @@ export function ManualAttendanceScreen() {
     repeat?.();
   }
 
-  if (loading) return <LoadingState fullPage label="Loading attendance record…" />;
-
   return (
-    <Screen branded includeBottomInset keyboardAware>
-      <GradientHeader
-        compact
+    <Screen keyboardAware contentStyle={styles.screen}>
+      <AttendancePageHeader
         onBack={() => router.back()}
-        subtitle={editing ? 'Update values with a required audit reason' : 'Add a completed work record'}
-        title={editing ? 'Edit Attendance' : 'Manual Attendance'}
+        subtitle={editing ? 'Corrections retain the previous values and your reason.' : 'Log a workday that wasn’t tracked with the timer.'}
+        title={editing ? 'Edit Record' : 'Add Record'}
       />
-      <View style={styles.content}>
 
-      {loadError ? (
+      {loading ? <LoadingState label="Loading attendance record…" /> : loadError ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{loadError}</Text>
           <Button onPress={() => router.back()} title="Go back" variant="ghost" />
         </View>
       ) : (
         <>
-          <Text style={styles.intro}>
-            {editing
-              ? 'Changes recalculate credited time and are recorded in the correction audit history.'
-              : 'Create a completed attendance record for a workday that was not tracked with the timer.'}
-          </Text>
-
-          <Card style={styles.formCard}>
+          <View style={styles.form}>
             <Controller
               control={control}
               name="workDate"
@@ -170,7 +176,7 @@ export function ManualAttendanceScreen() {
                 <DateTimeField
                   dateFormat={dateFormat}
                   error={errors.workDate?.message}
-                  label="Work date"
+                  label="Attendance date"
                   mode="date"
                   onBlur={field.onBlur}
                   onChange={field.onChange}
@@ -179,7 +185,7 @@ export function ManualAttendanceScreen() {
               )}
             />
             <View style={styles.timeRow}>
-              <View style={styles.timeField}>
+              <View style={[styles.timeField, fontScale > 1.2 && styles.stackedField]}>
                 <Controller
                   control={control}
                   name="timeIn"
@@ -196,7 +202,7 @@ export function ManualAttendanceScreen() {
                   )}
                 />
               </View>
-              <View style={styles.timeField}>
+              <View style={[styles.timeField, fontScale > 1.2 && styles.stackedField]}>
                 <Controller
                   control={control}
                   name="timeOut"
@@ -247,23 +253,22 @@ export function ManualAttendanceScreen() {
                 )}
               />
             ) : null}
-          </Card>
+          </View>
 
-          <Card style={styles.calculationCard}>
-            <Text style={styles.calculationTitle}>Calculated totals</Text>
-            <View style={styles.calculationRow}>
-              <Text style={styles.calculationLabel}>Elapsed</Text>
-              <Text style={styles.calculationValue}>
-                {preview ? formatDuration(preview.elapsedSeconds) : 'Invalid'}
-              </Text>
-            </View>
-            <View style={styles.calculationRow}>
-              <Text style={styles.calculationLabel}>Credited</Text>
-              <Text style={styles.calculationValue}>
-                {preview ? formatDuration(preview.creditedSeconds) : 'Invalid'}
-              </Text>
-            </View>
-          </Card>
+          <View style={styles.calculation}>
+            {preview ? (
+              <>
+                <View style={styles.calculationRow}>
+                  <Text style={styles.calculationLabel}>Elapsed</Text>
+                  <Text style={styles.calculationValue}>{formatAttendanceHours(preview.elapsedSeconds, true)}</Text>
+                </View>
+                <View style={styles.calculationRow}>
+                  <Text style={styles.calculationLabel}>Credited hours</Text>
+                  <Text style={styles.creditedValue}>{formatAttendanceHours(preview.creditedSeconds, true)}</Text>
+                </View>
+              </>
+            ) : <Text style={styles.calculationLabel}>Enter a valid time range and break to preview credited hours.</Text>}
+          </View>
 
           {saveError ? (
             <View accessibilityLiveRegion="assertive" style={styles.errorBanner}>
@@ -272,23 +277,21 @@ export function ManualAttendanceScreen() {
           ) : null}
 
           <Button
-            disabled={!preview || (editing && !existing)}
+            disabled={editing && !existing}
             fullWidth
-            icon={Save}
             loading={isSubmitting}
             onPress={() => void submit()}
-            title={editing ? 'Save correction' : 'Create attendance record'}
+            title={editing ? 'Save Changes' : 'Save Attendance'}
           />
         </>
       )}
 
-      </View>
       <Dialog
         actions={
-          <>
+          <View style={styles.dialogActions}>
             <Button onPress={() => setPendingNavigation(null)} title="Keep editing" variant="ghost" />
             <Button onPress={discardAndContinue} title="Discard changes" variant="danger" />
-          </>
+          </View>
         }
         description="Your attendance changes have not been saved."
         onDismiss={() => setPendingNavigation(null)}
@@ -300,53 +303,17 @@ export function ManualAttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    marginTop: -36,
-  },
-  intro: {
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  formCard: {
-    marginTop: spacing.md,
-    gap: spacing.lg,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  timeField: {
-    minWidth: 220,
-    flex: 1,
-  },
-  calculationCard: {
-    marginVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  calculationTitle: {
-    color: colors.text,
-    ...typography.subheading,
-  },
-  calculationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.lg,
-  },
-  calculationLabel: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  calculationValue: {
-    color: colors.text,
-    ...typography.bodyStrong,
-    fontVariant: ['tabular-nums'],
-  },
+  screen: { paddingHorizontal: 20, paddingBottom: spacing.xl },
+  form: { gap: spacing.md },
+  timeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  timeField: { flexGrow: 1, flexBasis: 140 },
+  stackedField: { flexBasis: '100%' },
+  calculation: { marginVertical: spacing.md, padding: spacing.sm, backgroundColor: '#F0F8F6', borderRadius: radius.md, gap: spacing.xs },
+  calculationRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', columnGap: spacing.sm },
+  calculationLabel: { color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
+  calculationValue: { color: colors.text, fontFamily: fontFamilies.label, fontSize: 14, lineHeight: 21, fontVariant: ['tabular-nums'] },
+  creditedValue: { color: colors.primaryDark, fontFamily: fontFamilies.headingSemibold, fontSize: 17, lineHeight: 24, fontVariant: ['tabular-nums'] },
+  dialogActions: { flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.xs },
   errorBanner: {
     alignItems: 'center',
     marginVertical: spacing.md,
@@ -357,7 +324,9 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.error,
     textAlign: 'center',
-    ...typography.body,
+    fontFamily: fontFamilies.body,
+    fontSize: 14,
+    lineHeight: 21,
   },
 });
 

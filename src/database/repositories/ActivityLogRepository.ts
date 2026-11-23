@@ -30,6 +30,14 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+const activityWithAttendance = `SELECT activity.*,
+  (
+    SELECT session.worked_duration_seconds
+    FROM attendance_sessions session
+    WHERE session.id = activity.attendance_session_id AND session.deleted_at IS NULL
+  ) AS attendance_credited_seconds
+  FROM activity_logs activity`;
+
 export class ActivityLogRepository {
   constructor(private readonly database: Database) {}
 
@@ -49,18 +57,21 @@ export class ActivityLogRepository {
       parameters.push(pattern, pattern);
     }
     const rows = await this.database.getAllAsync<ActivityLogRow>(
-      `SELECT activity.*,
-          (
-            SELECT session.worked_duration_seconds
-            FROM attendance_sessions session
-            WHERE session.id = activity.attendance_session_id AND session.deleted_at IS NULL
-          ) AS attendance_credited_seconds
-       FROM activity_logs activity
+      `${activityWithAttendance}
        WHERE ${conditions.join(' AND ')}
        ORDER BY work_date DESC, created_at DESC, id DESC`,
       ...parameters,
     );
     return rows.map(mapActivityLog);
+  }
+
+  async getById(id: number, profileId: number): Promise<ActivityLog | null> {
+    const row = await this.database.getFirstAsync<ActivityLogRow>(
+      `${activityWithAttendance} WHERE activity.id = ? AND activity.profile_id = ?`,
+      id,
+      profileId,
+    );
+    return row ? mapActivityLog(row) : null;
   }
 
   async listForWorkDate(profileId: number, workDate: WorkDate): Promise<ActivityLog[]> {

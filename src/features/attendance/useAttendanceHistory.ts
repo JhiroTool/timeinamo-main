@@ -1,10 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { AttendanceHistoryRepository } from '@/database/repositories';
-import type {
-  AttendanceHistoryFilter,
-  AttendanceMonthResult,
-} from '@/database/repositories';
+import type { AttendanceMonthResult } from '@/database/repositories';
 import { useDatabase } from '@/hooks/useDatabase';
 
 const emptyResult: AttendanceMonthResult = {
@@ -12,25 +9,34 @@ const emptyResult: AttendanceMonthResult = {
   summary: { creditedSeconds: 0, completedWorkdays: 0, incompleteCount: 0 },
 };
 
-export function useAttendanceHistory(month: string, filter: AttendanceHistoryFilter) {
+interface MonthLoad {
+  month: string;
+  status: 'loading' | 'ready' | 'error';
+  result?: AttendanceMonthResult;
+}
+
+export function useAttendanceHistory(month: string) {
   const database = useDatabase();
   const repository = useMemo(() => new AttendanceHistoryRepository(database), [database]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [result, setResult] = useState<AttendanceMonthResult>(emptyResult);
-  const [error, setError] = useState<Error | null>(null);
+  const [loadState, setLoadState] = useState<MonthLoad>({ month, status: 'loading' });
+  const latestRequest = useRef(0);
 
   const load = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
+    const request = ++latestRequest.current;
+    setLoadState((previous) => ({
+      month,
+      status: 'loading',
+      ...(previous.month === month && previous.result ? { result: previous.result } : {}),
+    }));
     try {
-      setResult(await repository.getMonth(1, month, filter));
-      setStatus('ready');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason : new Error('Attendance history could not be loaded.'));
-      setStatus('error');
+      const result = await repository.getMonth(1, month, 'all');
+      if (request === latestRequest.current) setLoadState({ month, status: 'ready', result });
+    } catch {
+      if (request === latestRequest.current) setLoadState({ month, status: 'error' });
     }
-  }, [filter, month, repository]);
+  }, [month, repository]);
 
-  return { status, result, error, load, repository } as const;
+  const current = loadState.month === month ? loadState : undefined;
+  return { status: current?.status ?? 'loading', result: current?.result ?? emptyResult, hasResult: Boolean(current?.result), load } as const;
 }
 

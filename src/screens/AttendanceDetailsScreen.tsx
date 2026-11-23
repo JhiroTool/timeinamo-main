@@ -1,16 +1,29 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { FilePenLine, Pencil, Trash2 } from 'lucide-react-native';
+import { Pencil, Trash2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Badge, Button, Card, Dialog, EmptyState, GradientHeader, LoadingState, Screen, SectionHeader } from '@/components/ui';
+import { Button, Dialog, LoadingState, Screen } from '@/components/ui';
 import { AttendanceHistoryRepository } from '@/database/repositories';
 import type { AttendanceDetails } from '@/database/repositories';
+import { AttendancePageHeader } from '@/features/attendance/AttendancePageHeader';
+import { formatAttendanceDate, formatAttendanceHours } from '@/features/attendance/attendancePresentation';
 import { useAttendance } from '@/features/attendance/useAttendance';
 import { useSetup } from '@/features/setup/useSetup';
 import { useDatabase } from '@/hooks/useDatabase';
-import { calculateAttendanceDurations, formatDuration } from '@/services/attendanceCalculations.js';
-import { colors, spacing, typography } from '@/theme';
+import { calculateAttendanceDurations } from '@/services/attendanceCalculations.js';
+import { colors, fontFamilies, radius, spacing } from '@/theme';
+import type { AttendanceCorrection } from '@/types/models';
+import { toWorkDate } from '@/utils/time';
+
+const fieldLabels: Record<AttendanceCorrection['fieldName'], string> = {
+  work_date: 'Attendance date',
+  clock_in_at: 'Time In',
+  clock_out_at: 'Time Out',
+  break_duration_seconds: 'Unpaid break',
+  worked_duration_seconds: 'Credited hours',
+  status: 'Status',
+};
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -19,13 +32,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
-}
-
-function readableField(value: string): string {
-  return value
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 export function AttendanceDetailsScreen() {
@@ -38,40 +44,37 @@ export function AttendanceDetailsScreen() {
   const { data: setup } = useSetup();
   const timezone = setup?.workSettings.timezone ?? 'Asia/Manila';
   const hour12 = setup?.workSettings.timeFormat !== '24h';
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<AttendanceDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!Number.isSafeInteger(recordId)) {
-      setError('Attendance record is invalid.');
-      setStatus('error');
-      return;
-    }
-    setStatus('loading');
+    setLoading(true);
     setError(null);
+    setDeleteError(null);
     try {
-      const result = await repository.getDetails(recordId);
-      if (!result) {
-        setError('Attendance record was not found.');
-        setStatus('error');
-      } else {
-        setDetails(result);
-        setStatus('ready');
-      }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Attendance details could not be loaded.');
-      setStatus('error');
+      const result = Number.isSafeInteger(recordId) ? await repository.getDetails(recordId) : null;
+      setDetails(result);
+      if (!result) setError('This attendance record is unavailable.');
+    } catch {
+      setError('Attendance details couldn’t be loaded.');
+    } finally {
+      setLoading(false);
     }
   }, [recordId, repository]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  const clockFormat = useMemo(() => new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12,
+  }), [timezone, hour12]);
+  const timestampFormat = useMemo(() => new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12,
+  }), [timezone, hour12]);
 
   const elapsedSeconds = useMemo(() => {
     const record = details?.record;
@@ -83,162 +86,106 @@ export function AttendanceDetailsScreen() {
     }
   }, [details]);
 
-  function formatTimestamp(value: string | null): string {
+  function formatClock(value: string | null, workDate: string) {
     if (!value) return 'Not recorded';
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12,
-    }).format(new Date(value));
+    return (toWorkDate(value, timezone) === workDate ? clockFormat : timestampFormat).format(new Date(value));
+  }
+
+  function formatCorrection(field: AttendanceCorrection['fieldName'], value: string | null) {
+    if (value === null) return 'Not recorded';
+    if (field === 'clock_in_at' || field === 'clock_out_at') return timestampFormat.format(new Date(value));
+    if (field === 'break_duration_seconds' || field === 'worked_duration_seconds') return formatAttendanceHours(Number(value), true);
+    if (field === 'work_date') return formatAttendanceDate(value, { month: 'short', day: 'numeric', year: 'numeric' });
+    if (value === 'on_break') return 'On break';
+    return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
   async function confirmDelete() {
+    if (deleting) return;
     setDeleting(true);
-    setError(null);
+    setDeleteError(null);
     try {
       await repository.delete(recordId);
       await refreshAttendance();
       setDeleteVisible(false);
-      router.replace('/attendance');
-    } catch (reason) {
+      router.dismissTo('/attendance');
+    } catch {
       setDeleteVisible(false);
-      setError(reason instanceof Error ? reason.message : 'Attendance could not be deleted.');
-      setStatus('error');
+      setDeleteError('Attendance couldn’t be deleted. Please try again.');
     } finally {
       setDeleting(false);
     }
   }
 
-  if (status === 'loading') return <LoadingState fullPage label="Loading attendance details…" />;
-
-  if (status === 'error' || !details) {
-    return (
-      <Screen branded>
-        <GradientHeader compact onBack={() => router.back()} subtitle="Session record and audit history" title="Attendance Details" />
-        <Card style={styles.errorCard}>
-          <EmptyState
-            action={<Button onPress={() => void load()} title="Try again" />}
-            description={error ?? 'This attendance record is unavailable.'}
-            icon={FilePenLine}
-            title="Unable to show record"
-          />
-        </Card>
-      </Screen>
-    );
-  }
-
-  const { record, corrections } = details;
+  const record = details?.record;
+  const title = record ? formatAttendanceDate(record.workDate, { weekday: 'long', month: 'long', day: 'numeric' }) : 'Attendance record';
 
   return (
-    <Screen branded>
-      <GradientHeader compact onBack={() => router.back()} subtitle="Session record and audit history" title="Attendance Details" />
+    <Screen contentStyle={styles.screen}>
+      <AttendancePageHeader title={title} onBack={() => router.back()} />
+      {loading ? <LoadingState label="Loading attendance details…" /> : null}
+      {!loading && (error || !details) ? (
+        <View style={styles.empty}>
+          <Text style={styles.support}>{error ?? 'This attendance record is unavailable.'}</Text>
+          <Button onPress={() => void load()} title="Retry" variant="ghost" />
+        </View>
+      ) : null}
 
-      <View style={styles.badges}>
-        <Badge
-          label={record.entrySource === 'manual' ? 'Manual entry' : 'Timer entry'}
-          tone="neutral"
-        />
-        <Badge
-          label={record.status === 'completed' ? 'Completed' : 'Incomplete'}
-          tone={record.status === 'completed' ? 'success' : 'warning'}
-        />
-        {record.isAdjusted ? <Badge icon={FilePenLine} label="Manually adjusted" tone="primary" /> : null}
-      </View>
+      {!loading && !error && details && record ? (
+        <>
+          <View style={styles.meta}>
+            <Text style={[styles.status, record.status !== 'completed' && styles.warning]}>
+              {record.status === 'completed' ? 'Completed' : 'Incomplete'}
+            </Text>
+            <Text style={styles.support}>{record.workDate.slice(0, 4)} · {record.entrySource === 'manual' ? 'Manual entry' : 'Timer entry'}</Text>
+            {record.isAdjusted ? <Text style={styles.adjusted}>Manually adjusted</Text> : null}
+          </View>
+          <View style={styles.creditedPanel}>
+            <Text style={styles.support}>Credited hours</Text>
+            <Text style={styles.credited}>{record.workedDurationSeconds === null ? 'Not credited' : formatAttendanceHours(record.workedDurationSeconds, true)}</Text>
+          </View>
+          <View style={styles.details}>
+            <DetailRow label="Time In" value={formatClock(record.clockInAt, record.workDate)} />
+            <DetailRow label="Time Out" value={formatClock(record.clockOutAt, record.workDate)} />
+            <DetailRow label="Elapsed duration" value={elapsedSeconds === null ? 'Not available' : formatAttendanceHours(elapsedSeconds, true)} />
+            <DetailRow label="Unpaid break" value={record.breakDurationSeconds % 60 === 0
+              ? `${record.breakDurationSeconds / 60} min` : formatAttendanceHours(record.breakDurationSeconds, true)} />
+          </View>
+          <View style={styles.actions}>
+            <Button icon={Pencil} onPress={() => router.push({ pathname: '/attendance/edit', params: { id: String(record.id) } })}
+              title="Edit Record" variant="outline" />
+            <Button icon={Trash2} onPress={() => setDeleteVisible(true)} title="Delete Record" variant="danger" />
+          </View>
+          {deleteError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{deleteError}</Text> : null}
 
-      <Card style={styles.detailsCard}>
-        <Text style={styles.workDate}>{record.workDate}</Text>
-        <DetailRow label="Time In" value={formatTimestamp(record.clockInAt)} />
-        <DetailRow label="Time Out" value={formatTimestamp(record.clockOutAt)} />
-        <DetailRow
-          label="Elapsed"
-          value={elapsedSeconds === null ? 'Incomplete' : formatDuration(elapsedSeconds)}
-        />
-        <DetailRow label="Unpaid break" value={formatDuration(record.breakDurationSeconds)} />
-        <DetailRow
-          label="Credited"
-          value={
-            record.workedDurationSeconds === null
-              ? 'Not credited'
-              : formatDuration(record.workedDurationSeconds)
-          }
-        />
-        <DetailRow label="Created" value={formatTimestamp(record.createdAt)} />
-        <DetailRow label="Last updated" value={formatTimestamp(record.updatedAt)} />
-      </Card>
-
-      <View style={styles.actions}>
-        <Button
-          icon={Pencil}
-          onPress={() =>
-            router.push({ pathname: '/attendance/edit', params: { id: String(record.id) } })
-          }
-          title="Edit"
-          variant="outline"
-        />
-        <Button
-          icon={Trash2}
-          onPress={() => setDeleteVisible(true)}
-          title="Delete"
-          variant="danger"
-        />
-      </View>
-
-      <View style={styles.auditSection}>
-        <SectionHeader
-          title="Correction history"
-          description="Previous and new values are retained on this device"
-        />
-        {corrections.length === 0 ? (
-          <Card>
-            <EmptyState
-              compact
-              description="This attendance record has not been adjusted."
-              icon={FilePenLine}
-              title="No corrections"
-            />
-          </Card>
-        ) : (
-          corrections.map((correction) => (
-            <Card key={correction.id} style={styles.auditCard}>
-              <View style={styles.auditHeader}>
-                <Text style={styles.auditField}>{readableField(correction.fieldName)}</Text>
-                <Text style={styles.auditTime}>{formatTimestamp(correction.createdAt)}</Text>
-              </View>
-              <Text style={styles.auditChange}>
-                {correction.oldValue ?? 'Empty'} → {correction.newValue ?? 'Empty'}
-              </Text>
-              <Text style={styles.auditReason}>{correction.reason}</Text>
-            </Card>
-          ))
-        )}
-      </View>
+          <View style={styles.audit}>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>Correction history</Text>
+            {details.corrections.length === 0 ? <Text style={styles.support}>No corrections for this record.</Text> :
+              details.corrections.map((correction) => (
+                <View key={correction.id} style={styles.auditRow}>
+                  <Text style={styles.auditField}>{fieldLabels[correction.fieldName]}</Text>
+                  <Text style={styles.support}>{timestampFormat.format(new Date(correction.createdAt))}</Text>
+                  <Text style={styles.change}>{formatCorrection(correction.fieldName, correction.oldValue)} → {formatCorrection(correction.fieldName, correction.newValue)}</Text>
+                  <Text style={styles.support}>{correction.reason}</Text>
+                </View>
+              ))}
+            <View style={styles.timestamps}>
+              <Text style={styles.support}>Created {timestampFormat.format(new Date(record.createdAt))}</Text>
+              <Text style={styles.support}>Updated {timestampFormat.format(new Date(record.updatedAt))}</Text>
+            </View>
+          </View>
+        </>
+      ) : null}
 
       <Dialog
         actions={
-          <>
-            <Button
-              disabled={deleting}
-              onPress={() => setDeleteVisible(false)}
-              title="Cancel"
-              variant="ghost"
-            />
-            <Button
-              loading={deleting}
-              onPress={() => void confirmDelete()}
-              title="Delete record"
-              variant="danger"
-            />
-          </>
+          <View style={styles.dialogActions}>
+            <Button disabled={deleting} onPress={() => setDeleteVisible(false)} title="Cancel" variant="ghost" />
+            <Button loading={deleting} onPress={() => void confirmDelete()} title="Delete Record" variant="danger" />
+          </View>
         }
-        description="This record will be removed from history and totals. Its audit data remains preserved locally."
-        onDismiss={() => {
-          if (!deleting) setDeleteVisible(false);
-        }}
+        description="This removes the record from attendance history and recalculates your credited totals."
+        onDismiss={() => { if (!deleting) setDeleteVisible(false); }}
         title="Delete attendance record?"
         visible={deleteVisible}
       />
@@ -247,79 +194,26 @@ export function AttendanceDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  badges: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: -32,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-  },
-  detailsCard: {
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  workDate: {
-    marginBottom: spacing.sm,
-    color: colors.text,
-    ...typography.title,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.lg,
-  },
-  detailLabel: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  detailValue: {
-    flex: 1,
-    color: colors.text,
-    textAlign: 'right',
-    ...typography.bodyStrong,
-  },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  auditSection: {
-    marginTop: spacing.xl,
-    gap: spacing.sm,
-  },
-  auditCard: {
-    gap: spacing.xs,
-  },
-  auditHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  auditField: {
-    color: colors.text,
-    ...typography.bodyStrong,
-  },
-  auditTime: {
-    flex: 1,
-    color: colors.textSecondary,
-    textAlign: 'right',
-    ...typography.caption,
-  },
-  auditChange: {
-    color: colors.primaryDark,
-    ...typography.caption,
-  },
-  auditReason: {
-    color: colors.textSecondary,
-    ...typography.body,
-  },
-  errorCard: {
-    marginTop: -32,
-  },
+  screen: { paddingHorizontal: 20, paddingBottom: spacing.xl },
+  meta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
+  support: { color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 13, lineHeight: 19 },
+  status: { color: colors.primaryDark, backgroundColor: colors.primarySoft, borderRadius: radius.pill, paddingHorizontal: spacing.xs, paddingVertical: spacing.xxs, fontFamily: fontFamilies.label, fontSize: 12, lineHeight: 17 },
+  warning: { color: colors.warning, backgroundColor: colors.warningSoft },
+  adjusted: { color: colors.primaryDark, fontFamily: fontFamilies.label, fontSize: 12, lineHeight: 17 },
+  creditedPanel: { padding: spacing.md, marginBottom: spacing.xs, borderRadius: radius.lg, backgroundColor: '#F0F8F6', borderWidth: 1, borderColor: '#DBEAE7', gap: spacing.xxs },
+  credited: { color: colors.primaryDark, fontFamily: fontFamilies.heading, fontSize: 31, lineHeight: 39, letterSpacing: -0.75, fontVariant: ['tabular-nums'] },
+  details: { marginVertical: spacing.sm },
+  detailRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  detailLabel: { flex: 1, color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
+  detailValue: { flex: 1, color: colors.text, textAlign: 'right', fontFamily: fontFamilies.label, fontSize: 14, lineHeight: 21, fontVariant: ['tabular-nums'] },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  dialogActions: { flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.xs },
+  error: { marginTop: spacing.sm, color: colors.error, fontFamily: fontFamilies.body },
+  audit: { gap: spacing.sm, marginTop: spacing.lg },
+  sectionTitle: { color: colors.text, fontFamily: fontFamilies.heading, fontSize: 19, lineHeight: 26 },
+  auditRow: { gap: spacing.xxs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.sm },
+  auditField: { color: colors.text, fontFamily: fontFamilies.label, fontSize: 14, lineHeight: 20 },
+  change: { color: colors.primaryDark, fontFamily: fontFamilies.bodyMedium, fontSize: 13, lineHeight: 20, fontVariant: ['tabular-nums'] },
+  timestamps: { gap: spacing.xxs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.sm },
+  empty: { alignItems: 'flex-start', gap: spacing.xs },
 });
-

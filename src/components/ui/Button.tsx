@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { PressableProps, StyleProp, ViewStyle } from 'react-native';
+import type { PressableProps, StyleProp, TextStyle, ViewStyle } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -13,6 +13,7 @@ interface ButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   loading?: boolean;
   fullWidth?: boolean;
   style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
 }
 
 const variantStyles = {
@@ -31,6 +32,7 @@ export function Button({
   fullWidth = false,
   disabled = false,
   style,
+  labelStyle,
   accessibilityLabel,
   ...props
 }: ButtonProps) {
@@ -59,7 +61,7 @@ export function Button({
         ) : Icon ? (
           <Icon color={palette.text} size={20} strokeWidth={2} />
         ) : null}
-        <Text style={[styles.label, { color: palette.text }]}>{title}</Text>
+        <Text style={[styles.label, { color: palette.text }, labelStyle]}>{title}</Text>
       </View>
     </Pressable>
   );

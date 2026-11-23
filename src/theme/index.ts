@@ -1,5 +1,13 @@
 import { Platform } from 'react-native';
 
+export const fontFamilies = {
+  heading: 'PlusJakartaSans_700Bold',
+  headingSemibold: 'PlusJakartaSans_600SemiBold',
+  body: 'Inter_400Regular',
+  bodyMedium: 'Inter_500Medium',
+  label: 'Inter_600SemiBold',
+} as const;
+
 export const colors = {
   primary: '#0F766E',
   primaryDark: '#115E59',

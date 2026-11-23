@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import {
   BookOpen,
   ChartNoAxesColumnIncreasing,
@@ -7,14 +7,24 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useWindowDimensions } from 'react-native';
+import { Text, useWindowDimensions } from 'react-native';
+import type { TextStyle } from 'react-native';
 
-import { colors, layout, spacing } from '@/theme';
+import { colors, fontFamilies, layout, spacing } from '@/theme';
 
 export default function TabsLayout() {
+  const pathname = usePathname();
+  const hideTabs = pathname === '/attendance/active' || pathname === '/journal/edit';
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const bottomPadding = Math.max(insets.bottom, spacing.xs);
+  const tabLabelStyle: TextStyle = {
+    fontFamily: fontFamilies.label,
+    fontSize: width < 400 ? 11 : 12,
+    fontWeight: 'normal',
+    lineHeight: 16,
+    marginTop: 1,
+  };
 
   return (
     <Tabs
@@ -23,34 +33,22 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.background },
         tabBarActiveTintColor: colors.primaryDark,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarActiveBackgroundColor: colors.primarySoft,
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: {
-          fontSize: width < 360 ? 10 : width < 400 ? 11 : 12,
-          lineHeight: 14,
-          fontWeight: '600',
-          marginTop: 1,
-        },
+        tabBarLabelStyle: tabLabelStyle,
         tabBarStyle: {
-          height: layout.tabBarBaseHeight + bottomPadding,
+          display: hideTabs ? 'none' : 'flex',
+          height: 54 + bottomPadding,
           paddingTop: spacing.xxs,
           paddingBottom: bottomPadding,
-          paddingHorizontal: spacing.xs,
+          paddingHorizontal: width < 360 ? 0 : spacing.xs,
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          elevation: 12,
-          shadowColor: colors.text,
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.04,
-          shadowRadius: 8,
+          elevation: 0,
         },
         tabBarItemStyle: {
           flex: 1,
           minHeight: layout.minimumTouchTarget,
-          marginHorizontal: 1,
-          marginVertical: 2,
-          borderRadius: 16,
         },
       }}
     >
@@ -58,29 +56,38 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <House color={color} size={size} strokeWidth={2} />,
+          tabBarIcon: ({ color }) => <House color={color} size={21} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen
         name="attendance"
         options={{
           title: 'Attendance',
-          tabBarIcon: ({ color, size }) => <Clock3 color={color} size={size} strokeWidth={2} />,
+          tabBarLabel: width < 360 ? ({ children, color }) => (
+            <Text
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              style={[tabLabelStyle, { alignSelf: 'stretch', color, textAlign: 'center' }]}
+            >
+              {children}
+            </Text>
+          ) : 'Attendance',
+          tabBarIcon: ({ color }) => <Clock3 color={color} size={21} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen
         name="journal"
         options={{
           title: 'Journal',
-          tabBarIcon: ({ color, size }) => <BookOpen color={color} size={size} strokeWidth={2} />,
+          tabBarIcon: ({ color }) => <BookOpen color={color} size={21} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen
         name="progress"
         options={{
           title: 'Progress',
-          tabBarIcon: ({ color, size }) => (
-            <ChartNoAxesColumnIncreasing color={color} size={size} strokeWidth={2} />
+          tabBarIcon: ({ color }) => (
+            <ChartNoAxesColumnIncreasing color={color} size={21} strokeWidth={2} />
           ),
         }}
       />
@@ -88,7 +95,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} strokeWidth={2} />,
+          tabBarIcon: ({ color }) => <Settings color={color} size={21} strokeWidth={2} />,
         }}
       />
     </Tabs>
