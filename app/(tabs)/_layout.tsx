@@ -7,11 +7,13 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useWindowDimensions } from 'react-native';
 
-import { colors, layout, spacing, typography } from '@/theme';
+import { colors, layout, spacing } from '@/theme';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const bottomPadding = Math.max(insets.bottom, spacing.xs);
 
   return (
@@ -19,29 +21,36 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.background },
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.primaryDark,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveBackgroundColor: colors.primarySoft,
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          ...typography.caption,
+          fontSize: width < 360 ? 10 : width < 400 ? 11 : 12,
+          lineHeight: 14,
           fontWeight: '600',
-          marginTop: 2,
+          marginTop: 1,
         },
         tabBarStyle: {
           height: layout.tabBarBaseHeight + bottomPadding,
-          paddingTop: spacing.xs,
+          paddingTop: spacing.xxs,
           paddingBottom: bottomPadding,
+          paddingHorizontal: spacing.xs,
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          elevation: 8,
+          elevation: 12,
           shadowColor: colors.text,
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.04,
           shadowRadius: 8,
         },
         tabBarItemStyle: {
+          flex: 1,
           minHeight: layout.minimumTouchTarget,
+          marginHorizontal: 1,
+          marginVertical: 2,
+          borderRadius: 16,
         },
       }}
     >

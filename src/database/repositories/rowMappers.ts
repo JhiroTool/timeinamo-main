@@ -47,6 +47,8 @@ export interface AttendanceSessionRow {
   break_duration_seconds: number;
   worked_duration_seconds: number | null;
   status: AttendanceSession['status'];
+  entry_source: AttendanceSession['entrySource'];
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,8 +67,11 @@ export interface ActivityLogRow {
   id: number;
   profile_id: number;
   work_date: string;
-  title: string | null;
+  title: string;
   content: string;
+  notes: string | null;
+  attendance_session_id: number | null;
+  attendance_credited_seconds?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -116,6 +121,8 @@ export function mapAttendanceSession(row: AttendanceSessionRow): AttendanceSessi
     breakDurationSeconds: row.break_duration_seconds,
     workedDurationSeconds: row.worked_duration_seconds,
     status: row.status,
+    entrySource: row.entry_source,
+    deletedAt: row.deleted_at as UtcTimestamp | null,
     createdAt: row.created_at as UtcTimestamp,
     updatedAt: row.updated_at as UtcTimestamp,
   };
@@ -140,6 +147,9 @@ export function mapActivityLog(row: ActivityLogRow): ActivityLog {
     workDate: row.work_date as WorkDate,
     title: row.title,
     content: row.content,
+    notes: row.notes,
+    attendanceSessionId: row.attendance_session_id,
+    attendanceCreditedSeconds: row.attendance_credited_seconds ?? null,
     createdAt: row.created_at as UtcTimestamp,
     updatedAt: row.updated_at as UtcTimestamp,
   };

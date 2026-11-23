@@ -21,9 +21,14 @@ export function BreakSelector({ valueMinutes, onChange, disabled = false }: Brea
         <Pressable
           accessibilityLabel="Decrease unpaid break by 15 minutes"
           accessibilityRole="button"
+          accessibilityState={{ disabled: disabled || valueMinutes === 0 }}
           disabled={disabled || valueMinutes === 0}
           onPress={() => update(valueMinutes - 15)}
-          style={({ pressed }) => [styles.control, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.control,
+            (disabled || valueMinutes === 0) && styles.disabled,
+            pressed && styles.pressed,
+          ]}
         >
           <Minus color={colors.primaryDark} size={22} />
         </Pressable>
@@ -34,14 +39,19 @@ export function BreakSelector({ valueMinutes, onChange, disabled = false }: Brea
         <Pressable
           accessibilityLabel="Increase unpaid break by 15 minutes"
           accessibilityRole="button"
+          accessibilityState={{ disabled: disabled || valueMinutes === 720 }}
           disabled={disabled || valueMinutes === 720}
           onPress={() => update(valueMinutes + 15)}
-          style={({ pressed }) => [styles.control, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.control,
+            (disabled || valueMinutes === 720) && styles.disabled,
+            pressed && styles.pressed,
+          ]}
         >
           <Plus color={colors.primaryDark} size={22} />
         </Pressable>
       </View>
-      <View style={styles.quickRow}>
+      <View accessibilityRole="radiogroup" style={styles.quickRow}>
         {quickValues.map((minutes) => {
           const selected = valueMinutes === minutes;
           return (
@@ -131,6 +141,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  disabled: {
+    opacity: 0.4,
   },
 });
 

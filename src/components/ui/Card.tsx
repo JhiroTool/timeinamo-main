@@ -2,7 +2,7 @@ import type { PropsWithChildren } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewProps, ViewStyle } from 'react-native';
 
-import { colors, radius, shadows, spacing } from '@/theme';
+import { colors, radius, shadows } from '@/theme';
 
 interface CardProps extends PropsWithChildren<Omit<ViewProps, 'style'>> {
   style?: StyleProp<ViewStyle>;
@@ -22,11 +22,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     ...shadows.card,
   },
   padded: {
-    padding: spacing.lg,
+    padding: 20,
   },
 });
 

@@ -3,11 +3,11 @@
     "name": "TimeInamo",
     "slug": "timeinamo",
     "version": "0.1.0",
+    "icon": "./assets/images/TI LOGO.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F7F9FC",
     "scheme": "timeinamo",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.timeinamo.mobile"
@@ -15,6 +15,7 @@
     "android": {
       "package": "app.timeinamo.mobile",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/images/TI LOGO.png",
         "backgroundColor": "#F7F9FC"
       }
     },
@@ -22,7 +23,8 @@
       "expo-router",
       "expo-sqlite",
       "expo-status-bar",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

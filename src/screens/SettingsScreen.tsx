@@ -1,12 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import Constants from 'expo-constants';
-import { usePreventRemove } from 'expo-router';
-import { Save, Trash2 } from 'lucide-react-native';
+import { usePreventRemove, useRouter } from 'expo-router';
+import { FileSpreadsheet, Save, Trash2 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader, Button, Card, Dialog, Screen, SectionHeader } from '@/components/ui';
+import { Button, Card, Dialog, GradientHeader, Screen, SectionHeader } from '@/components/ui';
 import {
   OjtGoalFields,
   PersonalInformationFields,
@@ -23,6 +23,7 @@ import { useSetup } from '@/features/setup/useSetup';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function SettingsScreen() {
+  const router = useRouter();
   const { data, save, deleteAllLocalData } = useSetup();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -86,8 +87,14 @@ export function SettingsScreen() {
   }
 
   return (
-    <Screen keyboardAware>
-      <AppHeader title="Settings" subtitle="Manage your local workspace" />
+    <Screen branded keyboardAware>
+      <GradientHeader
+        compact
+        eyebrow="TIMEINAMO"
+        subtitle="Manage your TimeInamo preferences"
+        title="Settings"
+      />
+      <View style={styles.content}>
 
       <View style={styles.section}>
         <SectionHeader title="Personal information" description="Your OJT identity and establishment" />
@@ -130,6 +137,19 @@ export function SettingsScreen() {
       />
 
       <View style={styles.section}>
+        <SectionHeader title="Data management" description="Export or remove local records" />
+        <Card>
+          <Button
+            fullWidth
+            icon={FileSpreadsheet}
+            onPress={() => router.push('/progress')}
+            title="Export Attendance CSV"
+            variant="outline"
+          />
+        </Card>
+      </View>
+
+      <View style={styles.section}>
         <SectionHeader title="About" />
         <Card style={styles.aboutCard}>
           <Text style={styles.aboutLabel}>TimeInamo version</Text>
@@ -149,6 +169,7 @@ export function SettingsScreen() {
           title="Delete all local data"
           variant="danger"
         />
+      </View>
       </View>
 
       <Dialog
@@ -197,8 +218,15 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  content: {
+    marginTop: -28,
+    paddingTop: spacing.md,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+  },
   section: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     gap: spacing.sm,
   },
   message: {

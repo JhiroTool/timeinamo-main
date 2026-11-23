@@ -3,6 +3,9 @@ import type { UtcTimestamp, WorkDate } from './time';
 export const ATTENDANCE_STATUSES = ['active', 'on_break', 'completed'] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+export const ATTENDANCE_ENTRY_SOURCES = ['automatic', 'manual'] as const;
+export type AttendanceEntrySource = (typeof ATTENDANCE_ENTRY_SOURCES)[number];
+
 export const CORRECTABLE_ATTENDANCE_FIELDS = [
   'work_date',
   'clock_in_at',
@@ -60,6 +63,8 @@ export interface AttendanceSession {
   breakDurationSeconds: number;
   workedDurationSeconds: number | null;
   status: AttendanceStatus;
+  entrySource: AttendanceEntrySource;
+  deletedAt: UtcTimestamp | null;
   createdAt: UtcTimestamp;
   updatedAt: UtcTimestamp;
 }
@@ -78,8 +83,11 @@ export interface ActivityLog {
   id: number;
   profileId: number;
   workDate: WorkDate;
-  title: string | null;
+  title: string;
   content: string;
+  notes: string | null;
+  attendanceSessionId: number | null;
+  attendanceCreditedSeconds: number | null;
   createdAt: UtcTimestamp;
   updatedAt: UtcTimestamp;
 }

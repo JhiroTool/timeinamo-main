@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     padding: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
   },
   headingRow: {
     minHeight: layout.minimumTouchTarget,

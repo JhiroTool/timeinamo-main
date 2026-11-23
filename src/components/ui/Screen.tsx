@@ -12,6 +12,7 @@ interface ScreenProps {
   keyboardAware?: boolean;
   includeBottomInset?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  branded?: boolean;
 }
 
 export function Screen({
@@ -20,6 +21,7 @@ export function Screen({
   keyboardAware = false,
   includeBottomInset = false,
   contentStyle,
+  branded = false,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
   const horizontalPadding = width < 360 ? spacing.md : spacing.lg;
@@ -29,6 +31,7 @@ export function Screen({
 
   const content = scrollable ? (
     <ScrollView
+      style={styles.scroller}
       contentContainerStyle={styles.scrollContent}
       contentInsetAdjustmentBehavior="never"
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -46,7 +49,7 @@ export function Screen({
   );
 
   return (
-    <SafeAreaView edges={edges} style={styles.safeArea}>
+    <SafeAreaView edges={edges} style={[styles.safeArea, branded && styles.brandedSafeArea]}>
       <KeyboardAvoidingView
         behavior={keyboardAware && Platform.OS === 'ios' ? 'padding' : undefined}
         enabled={keyboardAware}
@@ -63,6 +66,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  brandedSafeArea: {
+    backgroundColor: colors.primary,
+  },
+  scroller: {
+    backgroundColor: colors.background,
+  },
   keyboardView: {
     flex: 1,
   },
@@ -75,6 +84,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl,
+    backgroundColor: colors.background,
   },
   staticContent: {
     flex: 1,

@@ -1,6 +1,6 @@
 import { X } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, layout, radius, spacing, typography } from '@/theme';
@@ -37,24 +37,30 @@ export function BottomSheet({
           onPress={onDismiss}
           style={StyleSheet.absoluteFill}
         />
-        <SafeAreaView edges={['bottom']} style={styles.sheet}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.title}>
-              {title}
-            </Text>
-            <Pressable
-              accessibilityLabel="Close sheet"
-              accessibilityRole="button"
-              disabled={dismissDisabled}
-              onPress={onDismiss}
-              style={({ pressed }) => [styles.close, pressed && styles.closePressed]}
-            >
-              <X color={colors.textSecondary} size={22} />
-            </Pressable>
-          </View>
-          {children}
-        </SafeAreaView>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardContainer}
+        >
+          <SafeAreaView edges={['bottom']} style={styles.sheet}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <Text accessibilityRole="header" style={styles.title}>
+                {title}
+              </Text>
+              <Pressable
+                accessibilityLabel="Close sheet"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: dismissDisabled }}
+                disabled={dismissDisabled}
+                onPress={onDismiss}
+                style={({ pressed }) => [styles.close, pressed && styles.closePressed]}
+              >
+                <X color={colors.textSecondary} size={22} />
+              </Pressable>
+            </View>
+            {children}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -66,13 +72,16 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     backgroundColor: colors.overlay,
   },
+  keyboardContainer: {
+    justifyContent: 'flex-end',
+  },
   sheet: {
     maxHeight: '88%',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
   },
   handle: {
     width: 40,

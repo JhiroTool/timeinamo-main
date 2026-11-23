@@ -8,7 +8,7 @@ type BadgeTone = 'neutral' | 'primary' | 'success' | 'warning' | 'error';
 interface BadgeProps {
   label: string;
   tone?: BadgeTone;
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
 }
 
 const tones = {

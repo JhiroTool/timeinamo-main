@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 export const colors = {
   primary: '#0F766E',
   primaryDark: '#115E59',
+  primaryBright: '#0D9488',
+  primaryDeep: '#075E57',
   primarySoft: '#CCFBF1',
   background: '#F7F9FC',
   surface: '#FFFFFF',
@@ -11,6 +13,7 @@ export const colors = {
   textMuted: '#64748B',
   border: '#E2E8F0',
   borderStrong: '#CBD5E1',
+  progressTrack: '#DCE7F3',
   success: '#15803D',
   successSoft: '#DCFCE7',
   warning: '#B45309',
@@ -39,6 +42,7 @@ export const radius = {
   md: 12,
   lg: 16,
   xl: 24,
+  card: 22,
   pill: 999,
 } as const;
 
@@ -102,11 +106,11 @@ export const shadows = {
   card: Platform.select({
     ios: {
       shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 5 },
+      shadowOpacity: 0.1,
+      shadowRadius: 14,
     },
-    android: { elevation: 2 },
+    android: { elevation: 4 },
     default: {},
   }),
 } as const;

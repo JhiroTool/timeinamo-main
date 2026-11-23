@@ -28,6 +28,7 @@ export function ChoiceSelector<T extends string>({
           const selected = choice.value === value;
           return (
             <Pressable
+              accessibilityLabel={`${label}: ${choice.label}`}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected }}
               key={choice.value}

@@ -26,7 +26,7 @@ export class AttendanceRepository {
 
   async getById(id: number): Promise<AttendanceSession | null> {
     const row = await this.database.getFirstAsync<AttendanceSessionRow>(
-      'SELECT * FROM attendance_sessions WHERE id = ?',
+      'SELECT * FROM attendance_sessions WHERE id = ? AND deleted_at IS NULL',
       id,
     );
     return row ? mapAttendanceSession(row) : null;
@@ -34,7 +34,7 @@ export class AttendanceRepository {
 
   async getForWorkDate(profileId: number, workDate: WorkDate): Promise<AttendanceSession | null> {
     const row = await this.database.getFirstAsync<AttendanceSessionRow>(
-      'SELECT * FROM attendance_sessions WHERE profile_id = ? AND work_date = ?',
+      'SELECT * FROM attendance_sessions WHERE profile_id = ? AND work_date = ? AND deleted_at IS NULL',
       profileId,
       workDate,
     );
@@ -44,7 +44,7 @@ export class AttendanceRepository {
   async getActive(profileId: number): Promise<AttendanceSession | null> {
     const row = await this.database.getFirstAsync<AttendanceSessionRow>(
       `SELECT * FROM attendance_sessions
-       WHERE profile_id = ? AND status IN ('active', 'on_break')
+       WHERE profile_id = ? AND deleted_at IS NULL AND status IN ('active', 'on_break')
        LIMIT 1`,
       profileId,
     );
@@ -55,7 +55,7 @@ export class AttendanceRepository {
     const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
     const rows = await this.database.getAllAsync<AttendanceSessionRow>(
       `SELECT * FROM attendance_sessions
-       WHERE profile_id = ? AND status = 'completed'
+       WHERE profile_id = ? AND deleted_at IS NULL AND status = 'completed'
        ORDER BY work_date DESC, clock_in_at DESC LIMIT ?`,
       profileId,
       safeLimit,
@@ -74,7 +74,8 @@ export class AttendanceRepository {
       await this.database.withExclusiveTransactionAsync(async (transaction) => {
         const conflict = await transaction.getFirstAsync<{ id: number }>(
           `SELECT id FROM attendance_sessions
-           WHERE profile_id = ? AND (work_date = ? OR status IN ('active', 'on_break'))
+           WHERE profile_id = ? AND deleted_at IS NULL
+             AND (work_date = ? OR status IN ('active', 'on_break'))
            LIMIT 1`,
           input.profileId,
           workDate,
@@ -110,7 +111,7 @@ export class AttendanceRepository {
     const result = await this.database.runAsync(
       `UPDATE attendance_sessions
        SET status = 'on_break', break_started_at = ?, updated_at = ?
-       WHERE id = ? AND status = 'active'`,
+       WHERE id = ? AND deleted_at IS NULL AND status = 'active'`,
       timestamp,
       timestamp,
       id,
@@ -123,11 +124,32 @@ export class AttendanceRepository {
     return session;
   }
 
+  async updateUnpaidBreak(id: number, unpaidBreakSeconds: number): Promise<AttendanceSession> {
+    if (!Number.isSafeInteger(unpaidBreakSeconds) || unpaidBreakSeconds < 0) {
+      throw new DatabaseOperationError('Unpaid break must use non-negative whole seconds.');
+    }
+    const updatedAt = toUtcTimestamp();
+    const result = await this.database.runAsync(
+      `UPDATE attendance_sessions
+       SET break_duration_seconds = ?, updated_at = ?
+       WHERE id = ? AND deleted_at IS NULL AND status IN ('active', 'on_break')`,
+      unpaidBreakSeconds,
+      updatedAt,
+      id,
+    );
+    if (result.changes !== 1) {
+      throw new DatabaseOperationError('The active session could not be updated.');
+    }
+    const session = await this.getById(id);
+    if (!session) throw new DatabaseOperationError('Updated attendance could not be reloaded.');
+    return session;
+  }
+
   async endBreak(id: number, occurredAt: Date | string = new Date()): Promise<AttendanceSession> {
     const endedAt = toUtcTimestamp(occurredAt);
     await this.database.withExclusiveTransactionAsync(async (transaction) => {
       const row = await transaction.getFirstAsync<AttendanceSessionRow>(
-        `SELECT * FROM attendance_sessions WHERE id = ? AND status = 'on_break'`,
+        `SELECT * FROM attendance_sessions WHERE id = ? AND deleted_at IS NULL AND status = 'on_break'`,
         id,
       );
       if (!row?.break_started_at) {
@@ -142,7 +164,7 @@ export class AttendanceRepository {
         `UPDATE attendance_sessions
          SET status = 'active', break_started_at = NULL,
              break_duration_seconds = break_duration_seconds + ?, updated_at = ?
-         WHERE id = ? AND status = 'on_break'`,
+         WHERE id = ? AND deleted_at IS NULL AND status = 'on_break'`,
         seconds,
         endedAt,
         id,
@@ -158,7 +180,7 @@ export class AttendanceRepository {
     await this.database.withExclusiveTransactionAsync(async (transaction) => {
       const row = await transaction.getFirstAsync<AttendanceSessionRow>(
         `SELECT * FROM attendance_sessions
-         WHERE id = ? AND status IN ('active', 'on_break')`,
+         WHERE id = ? AND deleted_at IS NULL AND status IN ('active', 'on_break')`,
         id,
       );
       if (!row) throw new DatabaseOperationError('No active attendance session was found.');
@@ -181,7 +203,7 @@ export class AttendanceRepository {
         `UPDATE attendance_sessions
          SET status = 'completed', clock_out_at = ?, break_started_at = NULL,
              break_duration_seconds = ?, worked_duration_seconds = ?, updated_at = ?
-         WHERE id = ? AND status IN ('active', 'on_break')`,
+         WHERE id = ? AND deleted_at IS NULL AND status IN ('active', 'on_break')`,
         clockOutAt,
         totalBreakSeconds,
         workedSeconds,
@@ -204,7 +226,7 @@ export class AttendanceRepository {
       await this.database.withExclusiveTransactionAsync(async (transaction) => {
         const row = await transaction.getFirstAsync<AttendanceSessionRow>(
           `SELECT * FROM attendance_sessions
-           WHERE id = ? AND status IN ('active', 'on_break')`,
+           WHERE id = ? AND deleted_at IS NULL AND status IN ('active', 'on_break')`,
           id,
         );
         if (!row) throw new DatabaseOperationError('This session is no longer active.');
@@ -217,7 +239,7 @@ export class AttendanceRepository {
           `UPDATE attendance_sessions
            SET status = 'completed', clock_out_at = ?, break_started_at = NULL,
                break_duration_seconds = ?, worked_duration_seconds = ?, updated_at = ?
-           WHERE id = ? AND status IN ('active', 'on_break')`,
+           WHERE id = ? AND deleted_at IS NULL AND status IN ('active', 'on_break')`,
           clockOutAt,
           unpaidBreakSeconds,
           durations.creditedSeconds,

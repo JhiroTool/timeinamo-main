@@ -1,11 +1,10 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import type { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { CalendarDays, Clock3 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui';
-import { colors, layout, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 import type { DateFormat, TimeFormat } from '@/types/models';
 
 interface DateTimeFieldProps {
@@ -73,10 +72,14 @@ export function DateTimeField({
   const pickerValue = useMemo(() => valueToDate(value, mode), [mode, value]);
   const Icon = mode === 'date' ? CalendarDays : Clock3;
 
-  function handleChange(event: DateTimePickerEvent, selected?: Date) {
+  function handleValueChange(_event: unknown, selected: Date) {
+    onChange(dateToValue(selected, mode));
     if (Platform.OS === 'android') setVisible(false);
-    if (event.type === 'set' && selected) onChange(dateToValue(selected, mode));
-    if (Platform.OS === 'android') onBlur?.();
+  }
+
+  function handleDismiss() {
+    if (Platform.OS === 'android') setVisible(false);
+    onBlur?.();
   }
 
   return (
@@ -103,7 +106,8 @@ export function DateTimeField({
             display="default"
             is24Hour={timeFormat === '24h'}
             mode={mode}
-            onChange={handleChange}
+            onDismiss={handleDismiss}
+            onValueChange={handleValueChange}
             themeVariant="light"
             value={pickerValue}
           />
@@ -134,7 +138,7 @@ const styles = StyleSheet.create({
     ...typography.label,
   },
   frame: {
-    minHeight: layout.minimumTouchTarget + 4,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -142,7 +146,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
   frameError: {
     borderColor: colors.error,

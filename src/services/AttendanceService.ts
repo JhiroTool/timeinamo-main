@@ -33,5 +33,12 @@ export class AttendanceService {
       occurredAt,
     );
   }
+
+  async updateUnpaidBreak(
+    sessionId: number,
+    unpaidBreakSeconds: number,
+  ): Promise<AttendanceSession> {
+    return this.repositories.attendance.updateUnpaidBreak(sessionId, unpaidBreakSeconds);
+  }
 }
 

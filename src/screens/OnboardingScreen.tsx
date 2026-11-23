@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { BackHandler, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader, Badge, Button, Card, Screen } from '@/components/ui';
+import { Badge, Button, Card, GradientHeader, Screen } from '@/components/ui';
 import {
   OjtGoalFields,
   PersonalInformationFields,
@@ -95,8 +95,15 @@ export function OnboardingScreen() {
   });
 
   return (
-    <Screen includeBottomInset keyboardAware>
-      <AppHeader onBack={step > 0 ? goBack : undefined} title="Set up TimeInamo" />
+    <Screen branded includeBottomInset keyboardAware>
+      <GradientHeader
+        compact
+        {...(step > 0 ? { onBack: goBack } : {})}
+        showBrand
+        subtitle="Your private Work & OJT tracker"
+        title="Let’s get you set up"
+      />
+      <View style={styles.content}>
 
       <View style={styles.progress}>
         {[0, 1, 2].map((index) => (
@@ -161,15 +168,22 @@ export function OnboardingScreen() {
         {step > 0 ? <Button onPress={goBack} title="Back" variant="ghost" /> : null}
       </View>
       <Text style={styles.privacy}>Your setup is saved only on this device.</Text>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  content: {
+    marginTop: -34,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+  },
   progress: {
     flexDirection: 'row',
     gap: spacing.xs,
-    marginTop: spacing.sm,
+    marginTop: 0,
   },
   progressBar: {
     height: 4,

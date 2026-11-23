@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   inputFrame: {
-    minHeight: layout.minimumTouchTarget + 4,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
   inputFrameFocused: {
     borderWidth: 2,

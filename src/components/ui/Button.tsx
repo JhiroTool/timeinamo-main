@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PressableProps, StyleProp, ViewStyle } from 'react-native';
 
-import { colors, layout, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 
@@ -67,10 +67,10 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: layout.minimumTouchTarget,
+    minHeight: 52,
     paddingHorizontal: spacing.lg,
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   content: {
-    minHeight: layout.minimumTouchTarget - 2,
+    minHeight: 50,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

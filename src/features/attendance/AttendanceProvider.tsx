@@ -102,6 +102,26 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
     [service],
   );
 
+  const updateUnpaidBreak = useCallback(
+    async (sessionId: number, unpaidBreakSeconds: number) => {
+      if (operationLock.current) {
+        throw new DatabaseOperationError('Attendance update already in progress.');
+      }
+      operationLock.current = true;
+      setOperation('update_break');
+      try {
+        const session = await service.updateUnpaidBreak(sessionId, unpaidBreakSeconds);
+        setActiveSession(session);
+        setError(null);
+        return session;
+      } finally {
+        operationLock.current = false;
+        setOperation(null);
+      }
+    },
+    [service],
+  );
+
   const value = useMemo<AttendanceContextValue>(
     () => ({
       status,
@@ -112,8 +132,19 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       refresh,
       timeIn,
       timeOut,
+      updateUnpaidBreak,
     }),
-    [activeSession, error, operation, recentSessions, refresh, status, timeIn, timeOut],
+    [
+      activeSession,
+      error,
+      operation,
+      recentSessions,
+      refresh,
+      status,
+      timeIn,
+      timeOut,
+      updateUnpaidBreak,
+    ],
   );
 
   return <AttendanceContext.Provider value={value}>{children}</AttendanceContext.Provider>;

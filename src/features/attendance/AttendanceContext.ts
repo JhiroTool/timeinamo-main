@@ -7,7 +7,7 @@ export interface AttendanceContextValue {
   activeSession: AttendanceSession | null;
   recentSessions: AttendanceSession[];
   error: Error | null;
-  operation: 'time_in' | 'time_out' | null;
+  operation: 'time_in' | 'time_out' | 'update_break' | null;
   refresh: () => Promise<void>;
   timeIn: () => Promise<AttendanceSession>;
   timeOut: (
@@ -15,6 +15,7 @@ export interface AttendanceContextValue {
     unpaidBreakSeconds: number,
     occurredAt?: Date,
   ) => Promise<AttendanceSession>;
+  updateUnpaidBreak: (sessionId: number, unpaidBreakSeconds: number) => Promise<AttendanceSession>;
 }
 
 export const AttendanceContext = createContext<AttendanceContextValue | null>(null);

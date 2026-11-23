@@ -89,7 +89,9 @@ export function zonedDateTimeToUtc(
   if (!timeMatch) throw new RangeError('Time must use HH:mm.');
   assertValidTimeZone(timezone);
 
-  const [year, month, day] = validDate.split('-').map(Number);
+  const year = Number(validDate.slice(0, 4));
+  const month = Number(validDate.slice(5, 7));
+  const day = Number(validDate.slice(8, 10));
   const hour = Number(timeMatch[1]);
   const minute = Number(timeMatch[2]);
   const desiredWallTime = Date.UTC(year, month - 1, day, hour, minute);
@@ -98,8 +100,11 @@ export function zonedDateTimeToUtc(
   // Iteratively resolve the timezone offset without relying on the device timezone.
   for (let index = 0; index < 3; index += 1) {
     const candidate = getZonedDateTimeParts(new Date(candidateMs), timezone);
-    const [candidateYear, candidateMonth, candidateDay] = candidate.date.split('-').map(Number);
-    const [candidateHour, candidateMinute] = candidate.time.split(':').map(Number);
+    const candidateYear = Number(candidate.date.slice(0, 4));
+    const candidateMonth = Number(candidate.date.slice(5, 7));
+    const candidateDay = Number(candidate.date.slice(8, 10));
+    const candidateHour = Number(candidate.time.slice(0, 2));
+    const candidateMinute = Number(candidate.time.slice(3, 5));
     const candidateWallTime = Date.UTC(
       candidateYear,
       candidateMonth - 1,

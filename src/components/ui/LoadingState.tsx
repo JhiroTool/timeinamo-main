@@ -1,6 +1,6 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { colors, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 
 interface LoadingStateProps {
   label?: string;
@@ -26,6 +26,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.md,
     padding: spacing.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
   },
   fullPage: {
     flex: 1,
