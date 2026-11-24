@@ -14,7 +14,7 @@ import { colors, fontFamilies, layout, spacing } from '@/theme';
 export function JournalDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { repository, profileId, setNotice } = useJournal();
+  const { repository, profileId, dateFormat, setNotice } = useJournal();
   const { entry, loading, error, retry } = useJournalEntry(id ?? '');
   const [deleting, setDeleting] = useState(false);
   const deletingLock = useRef(false);
@@ -50,7 +50,7 @@ export function JournalDetailsScreen() {
       <ScrollView contentContainerStyle={styles.article} showsVerticalScrollIndicator={false}>
         {loading ? <LoadingState label="Loading activity…" /> : entry ? (
           <>
-            <Text style={styles.date}>{formatJournalDate(entry.workDate)}</Text>
+            <Text style={styles.date}>{formatJournalDate(entry.workDate, dateFormat)}</Text>
             <Text accessibilityRole="header" style={styles.title}>{entry.title}</Text>
             <Text selectable style={styles.readingText}>{entry.content}</Text>
             {entry.notes ? (

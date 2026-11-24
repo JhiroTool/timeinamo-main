@@ -3,9 +3,10 @@ import { CalendarDays, Clock3 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import { BottomSheet, Button } from '@/components/ui';
+import { colors, fontFamilies, radius, spacing, typography } from '@/theme';
 import type { DateFormat, TimeFormat } from '@/types/models';
+import { formatScheduleTime, formatWorkDate } from '@/utils/time';
 
 interface DateTimeFieldProps {
   label: string;
@@ -16,6 +17,7 @@ interface DateTimeFieldProps {
   error?: string | undefined;
   timeFormat?: TimeFormat;
   dateFormat?: DateFormat;
+  compact?: boolean;
 }
 
 function valueToDate(value: string, mode: 'date' | 'time'): Date {
@@ -42,20 +44,7 @@ function displayValue(
   dateFormat: DateFormat,
 ): string {
   if (!value) return mode === 'date' ? 'Select date' : 'Select time';
-  const date = valueToDate(value, mode);
-  if (mode === 'time') {
-    return new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: timeFormat === '12h',
-    }).format(date);
-  }
-  const locale = dateFormat === 'dmy' ? 'en-GB' : dateFormat === 'ymd' ? 'en-CA' : 'en-US';
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(date);
+  return mode === 'time' ? formatScheduleTime(value, timeFormat) : formatWorkDate(value, dateFormat);
 }
 
 export function DateTimeField({
@@ -67,63 +56,76 @@ export function DateTimeField({
   error,
   timeFormat = '12h',
   dateFormat = 'mdy',
+  compact = false,
 }: DateTimeFieldProps) {
   const [visible, setVisible] = useState(false);
   const pickerValue = useMemo(() => valueToDate(value, mode), [mode, value]);
   const Icon = mode === 'date' ? CalendarDays : Clock3;
+  const pickerInSheet = compact && Platform.OS === 'ios';
 
   function handleValueChange(_event: unknown, selected: Date) {
     onChange(dateToValue(selected, mode));
-    if (Platform.OS === 'android') setVisible(false);
+    if (Platform.OS === 'android') {
+      setVisible(false);
+      if (compact) onBlur?.();
+    }
   }
 
   function handleDismiss() {
-    if (Platform.OS === 'android') setVisible(false);
+    setVisible(false);
     onBlur?.();
   }
 
+  const picker = visible ? (
+    <DateTimePicker
+      display={pickerInSheet ? 'spinner' : 'default'}
+      is24Hour={timeFormat === '24h'}
+      mode={mode}
+      onDismiss={handleDismiss}
+      onValueChange={handleValueChange}
+      {...(pickerInSheet ? { style: styles.sheetPicker } : {})}
+      themeVariant="light"
+      value={pickerValue}
+    />
+  ) : null;
+
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, compact && styles.compactLabel]}>{label}</Text>
       <Pressable
         accessibilityLabel={`${label}, ${displayValue(value, mode, timeFormat, dateFormat)}`}
         accessibilityRole="button"
         onPress={() => setVisible(true)}
         style={({ pressed }) => [
           styles.frame,
+          compact && styles.compactFrame,
           error ? styles.frameError : null,
           pressed && styles.pressed,
         ]}
       >
-        <Icon color={colors.textMuted} size={20} />
-        <Text style={[styles.value, !value && styles.placeholder]}>
+        {!compact || mode === 'date' ? <Icon color={colors.textMuted} size={compact ? 18 : 20} /> : null}
+        <Text style={[styles.value, compact && styles.compactValue, !value && styles.placeholder]}>
           {displayValue(value, mode, timeFormat, dateFormat)}
         </Text>
       </Pressable>
-      {visible ? (
+      {visible && pickerInSheet ? (
+        <BottomSheet onDismiss={handleDismiss} scrollable title={label} titleStyle={styles.sheetTitle} visible>
+          {picker}
+          <Button fullWidth onPress={handleDismiss} title="Done" />
+        </BottomSheet>
+      ) : visible ? (
         <View style={Platform.OS === 'ios' ? styles.iosPicker : undefined}>
-          <DateTimePicker
-            display="default"
-            is24Hour={timeFormat === '24h'}
-            mode={mode}
-            onDismiss={handleDismiss}
-            onValueChange={handleValueChange}
-            themeVariant="light"
-            value={pickerValue}
-          />
+          {picker}
           {Platform.OS === 'ios' ? (
             <Button
-              onPress={() => {
-                setVisible(false);
-                onBlur?.();
-              }}
+              onPress={handleDismiss}
               title="Done"
               variant="ghost"
             />
           ) : null}
         </View>
       ) : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text accessibilityLiveRegion="polite" style={[styles.error, compact && styles.compactError]}>{error}</Text> : null}
     </View>
   );
 }
@@ -173,5 +175,11 @@ const styles = StyleSheet.create({
     color: colors.error,
     ...typography.caption,
   },
+  compactLabel: { fontFamily: fontFamilies.label, fontWeight: 'normal' },
+  compactFrame: { borderRadius: radius.md, paddingHorizontal: spacing.sm },
+  compactValue: { fontFamily: fontFamilies.bodyMedium, fontWeight: 'normal', fontSize: 15, fontVariant: ['tabular-nums'] },
+  compactError: { fontFamily: fontFamilies.body, fontWeight: 'normal' },
+  sheetTitle: { fontFamily: fontFamilies.headingSemibold, fontWeight: 'normal' },
+  sheetPicker: { alignSelf: 'stretch' },
 });
 

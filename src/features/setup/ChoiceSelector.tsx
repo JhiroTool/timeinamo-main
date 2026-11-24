@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, layout, radius, spacing, typography } from '@/theme';
+import { colors, fontFamilies, layout, radius, spacing, typography } from '@/theme';
 
 interface Choice<T extends string> {
   label: string;
@@ -12,6 +12,7 @@ interface ChoiceSelectorProps<T extends string> {
   value: T;
   choices: readonly Choice<T>[];
   onChange: (value: T) => void;
+  compact?: boolean;
 }
 
 export function ChoiceSelector<T extends string>({
@@ -19,11 +20,12 @@ export function ChoiceSelector<T extends string>({
   value,
   choices,
   onChange,
+  compact = false,
 }: ChoiceSelectorProps<T>) {
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.row}>
+      <Text style={[styles.label, compact && styles.compactLabel]}>{label}</Text>
+      <View accessibilityRole="radiogroup" style={[styles.row, compact && styles.compactRow]}>
         {choices.map((choice) => {
           const selected = choice.value === value;
           return (
@@ -35,11 +37,12 @@ export function ChoiceSelector<T extends string>({
               onPress={() => onChange(choice.value)}
               style={({ pressed }) => [
                 styles.choice,
+                compact && styles.compactChoice,
                 selected && styles.choiceSelected,
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={[styles.choiceLabel, selected && styles.choiceLabelSelected]}>
+              <Text style={[styles.choiceLabel, compact && styles.compactLabel, selected && styles.choiceLabelSelected]}>
                 {choice.label}
               </Text>
             </Pressable>
@@ -87,5 +90,8 @@ const styles = StyleSheet.create({
   choiceLabelSelected: {
     color: colors.primaryDark,
   },
+  compactLabel: { fontFamily: fontFamilies.label, fontWeight: 'normal', fontSize: 13 },
+  compactRow: { gap: 6 },
+  compactChoice: { minWidth: layout.minimumTouchTarget, paddingHorizontal: 10, backgroundColor: colors.surface },
 });
 

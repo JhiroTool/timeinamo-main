@@ -35,13 +35,7 @@ export class OjtInsightsRepository {
     today: WorkDate,
     weeklyFrom: WorkDate,
   ): Promise<OjtInsightsSnapshot> {
-    const [todayRow, latestRows, summary, creditedRows] = await Promise.all([
-      this.database.getFirstAsync<AttendanceSessionRow>(
-        `SELECT * FROM attendance_sessions
-         WHERE profile_id = ? AND work_date = ? AND deleted_at IS NULL`,
-        profileId,
-        today,
-      ),
+    const [latestRows, summary, creditedRows] = await Promise.all([
       this.database.getAllAsync<AttendanceSessionRow>(
         `SELECT * FROM attendance_sessions
          WHERE profile_id = ? AND deleted_at IS NULL
@@ -66,6 +60,7 @@ export class OjtInsightsRepository {
         weeklyFrom,
       ),
     ]);
+    const todayRow = latestRows.find((row) => row.work_date === today);
 
     return {
       today: todayRow ? mapAttendanceSession(todayRow) : null,

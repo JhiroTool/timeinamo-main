@@ -6,9 +6,11 @@ import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/70
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AppOpening } from '@/components/AppOpening';
 import { DatabaseProvider } from '@/database/DatabaseProvider';
 import { DatabaseErrorView } from '@/components/DatabaseErrorView';
 import { LoadingState } from '@/components/ui';
@@ -25,42 +27,53 @@ const appFonts = {
   [fontFamilies.label]: Inter_600SemiBold,
 };
 
-function AppNavigator() {
+let hasFinishedOpening = false;
+
+function AppNavigator({ fontsReady, onScreenLayout }: { fontsReady: boolean; onScreenLayout: () => void }) {
   const { status, isComplete, error, refresh } = useSetup();
 
-  if (status === 'loading') return <LoadingState fullPage label="Loading your setup…" />;
   if (status === 'error') {
     return (
       <DatabaseErrorView
         error={error ?? new Error('Setup could not be loaded.')}
+        onLayout={onScreenLayout}
         onRetry={() => void refresh()}
       />
     );
   }
+  if (status === 'loading' || !fontsReady) return <LoadingState fullPage label="Loading your setup…" />;
 
   return (
-    <>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          animation: 'slide_from_right',
-          contentStyle: { backgroundColor: colors.background },
-          headerShown: false,
-        }}
-      >
-        <Stack.Protected guard={isComplete}>
-          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-        </Stack.Protected>
-        <Stack.Protected guard={!isComplete}>
-          <Stack.Screen name="onboarding" />
-        </Stack.Protected>
-      </Stack>
-    </>
+    <Stack
+      screenLayout={({ children }) => (
+        <View onLayout={onScreenLayout} style={styles.scene}>{children}</View>
+      )}
+      screenOptions={{
+        animation: 'slide_from_right',
+        contentStyle: { backgroundColor: colors.background },
+        headerShown: false,
+      }}
+    >
+      <Stack.Protected guard={isComplete}>
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!isComplete}>
+        <Stack.Screen name="onboarding" />
+      </Stack.Protected>
+    </Stack>
   );
 }
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(appFonts);
+  const fontsReady = fontsLoaded || Boolean(fontError);
+  const [opening, setOpening] = useState(() => !hasFinishedOpening);
+  const [screenLaidOut, setScreenLaidOut] = useState(false);
+  const markScreenLaidOut = useCallback(() => setScreenLaidOut(true), []);
+  const finishOpening = useCallback(() => {
+    hasFinishedOpening = true;
+    setOpening(false);
+  }, []);
 
   useEffect(() => {
     if (fontError) console.warn('TimeInamo fonts could not be loaded.', fontError);
@@ -68,16 +81,29 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      {fontsLoaded || fontError ? (
-        <DatabaseProvider>
-          <SetupProvider>
-            <AttendanceProvider>
-              <AppNavigator />
-            </AttendanceProvider>
-          </SetupProvider>
-        </DatabaseProvider>
-      ) : null}
+      <StatusBar style="dark" />
+      <View style={styles.root}>
+        <View
+          accessibilityElementsHidden={opening}
+          importantForAccessibility={opening ? 'no-hide-descendants' : 'auto'}
+          style={styles.scene}
+        >
+          <DatabaseProvider onErrorLayout={markScreenLaidOut}>
+            <SetupProvider>
+              <AttendanceProvider>
+                <AppNavigator fontsReady={fontsReady} onScreenLayout={markScreenLaidOut} />
+              </AttendanceProvider>
+            </SetupProvider>
+          </DatabaseProvider>
+        </View>
+        {opening ? <AppOpening fontsReady={fontsReady} onFinish={finishOpening} ready={screenLaidOut} /> : null}
+      </View>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  scene: { flex: 1, backgroundColor: colors.background },
+});
 

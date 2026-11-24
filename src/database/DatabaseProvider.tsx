@@ -2,20 +2,21 @@ import type { PropsWithChildren } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DatabaseErrorView } from '@/components/DatabaseErrorView';
-import { AppLoadingView } from '@/components/AppLoadingView';
+import { LoadingState } from '@/components/ui';
 import type { DatabaseState } from '@/types/database';
 
 import { DatabaseContext } from './DatabaseContext';
 import { initializeDatabase } from './database';
+import { DatabaseRecoveryRequiredError } from './errors';
 
-export function DatabaseProvider({ children }: PropsWithChildren) {
+export function DatabaseProvider({ children, onErrorLayout }: PropsWithChildren<{ onErrorLayout: () => void }>) {
   const [state, setState] = useState<DatabaseState>({ status: 'initializing' });
-  const [attempt, setAttempt] = useState(0);
+  const [attempt, setAttempt] = useState({ recoverMissingProfile: false });
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'initializing' });
-    initializeDatabase().then(
+    initializeDatabase(attempt).then(
       (database) => {
         if (!cancelled) setState({ status: 'ready', database });
       },
@@ -33,12 +34,22 @@ export function DatabaseProvider({ children }: PropsWithChildren) {
     };
   }, [attempt]);
 
-  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  const retry = useCallback(() => setAttempt({ recoverMissingProfile: false }), []);
+  const recover = useCallback(() => setAttempt({ recoverMissingProfile: true }), []);
   const contextValue = useMemo(() => state, [state]);
 
-  if (state.status === 'initializing') return <AppLoadingView />;
+  if (state.status === 'initializing') {
+    return <LoadingState fullPage label="Preparing your local workspace…" />;
+  }
   if (state.status === 'error') {
-    return <DatabaseErrorView error={state.error} onRetry={retry} />;
+    return (
+      <DatabaseErrorView
+        error={state.error}
+        onLayout={onErrorLayout}
+        onRetry={retry}
+        {...(state.error instanceof DatabaseRecoveryRequiredError ? { onRecover: recover } : {})}
+      />
+    );
   }
 
   return <DatabaseContext.Provider value={contextValue}>{children}</DatabaseContext.Provider>;

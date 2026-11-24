@@ -20,7 +20,6 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
   const service = useMemo(() => new AttendanceService(repositories), [repositories]);
   const [status, setStatus] = useState<AttendanceContextValue['status']>('loading');
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
-  const [recentSessions, setRecentSessions] = useState<AttendanceSession[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [operation, setOperation] = useState<AttendanceContextValue['operation']>(null);
   const operationLock = useRef(false);
@@ -28,18 +27,13 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
   const refresh = useCallback(async () => {
     if (!isComplete) {
       setActiveSession(null);
-      setRecentSessions([]);
       setError(null);
       setStatus('ready');
       return;
     }
     try {
-      const [active, recent] = await Promise.all([
-        repositories.attendance.getActive(PROFILE_ID),
-        repositories.attendance.listRecentCompleted(PROFILE_ID),
-      ]);
+      const active = await repositories.attendance.getActive(PROFILE_ID);
       setActiveSession(active);
-      setRecentSessions(recent);
       setError(null);
       setStatus('ready');
     } catch (reason) {
@@ -91,7 +85,6 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
           occurredAt,
         );
         setActiveSession(null);
-        setRecentSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
         setError(null);
         return session;
       } finally {
@@ -126,7 +119,6 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
     () => ({
       status,
       activeSession,
-      recentSessions,
       error,
       operation,
       refresh,
@@ -138,7 +130,6 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       activeSession,
       error,
       operation,
-      recentSessions,
       refresh,
       status,
       timeIn,

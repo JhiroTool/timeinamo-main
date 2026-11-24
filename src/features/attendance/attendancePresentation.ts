@@ -1,9 +1,12 @@
+import type { DateFormat } from '@/types/models';
+import { formatWorkDate } from '@/utils/time';
+
 export function workDateToUtc(workDate: string): Date {
   return new Date(`${workDate}T00:00:00.000Z`);
 }
 
-export function formatAttendanceDate(workDate: string, options: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat('en-US', { ...options, timeZone: 'UTC' }).format(workDateToUtc(workDate));
+export function formatAttendanceDate(workDate: string, options: Intl.DateTimeFormatOptions, preference: DateFormat): string {
+  return formatWorkDate(workDate, preference, options);
 }
 
 export function formatAttendanceHours(seconds: number, includeSeconds = false): string {

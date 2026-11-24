@@ -8,17 +8,23 @@ import { Button } from './ui';
 interface DatabaseErrorViewProps {
   error: Error;
   onRetry: () => void;
+  onRecover?: () => void;
+  onLayout?: (() => void) | undefined;
 }
 
-export function DatabaseErrorView({ error, onRetry }: DatabaseErrorViewProps) {
+export function DatabaseErrorView({ error, onRetry, onRecover, onLayout }: DatabaseErrorViewProps) {
   return (
-    <View style={styles.container}>
+    <View onLayout={onLayout} style={styles.container}>
       <View style={styles.icon}>
         <AlertTriangle color={colors.error} size={28} />
       </View>
-      <Text style={styles.title}>Local storage is unavailable</Text>
+      <Text accessibilityRole="header" style={styles.title}>
+        {onRecover ? 'Recover your local records' : 'Local storage is unavailable'}
+      </Text>
       <Text style={styles.message}>{error.message}</Text>
-      <Button onPress={onRetry} title="Try again" />
+      {onRecover
+        ? <Button onPress={onRecover} title="Recover local records" />
+        : <Button onPress={onRetry} title="Try again" />}
     </View>
   );
 }

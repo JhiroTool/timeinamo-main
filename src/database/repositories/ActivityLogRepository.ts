@@ -14,6 +14,8 @@ import {
 export interface ActivityLogQuery {
   search?: string;
   workDate?: WorkDate | null;
+  limit?: number;
+  offset?: number;
 }
 
 export interface SaveActivityLogInput {
@@ -56,10 +58,18 @@ export class ActivityLogRepository {
       const pattern = `%${escapeLike(search)}%`;
       parameters.push(pattern, pattern);
     }
+    const pagination = query.limit === undefined
+      ? ''
+      : ' LIMIT ? OFFSET ?';
+    if (query.limit !== undefined) {
+      const limit = Math.max(1, Math.min(100, Math.floor(query.limit)));
+      const offset = Math.max(0, Math.floor(query.offset ?? 0));
+      parameters.push(limit, offset);
+    }
     const rows = await this.database.getAllAsync<ActivityLogRow>(
       `${activityWithAttendance}
        WHERE ${conditions.join(' AND ')}
-       ORDER BY work_date DESC, created_at DESC, id DESC`,
+       ORDER BY work_date DESC, created_at DESC, id DESC${pagination}`,
       ...parameters,
     );
     return rows.map(mapActivityLog);

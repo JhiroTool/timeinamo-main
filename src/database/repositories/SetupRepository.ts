@@ -124,10 +124,8 @@ export class SetupRepository {
 
   async deleteAllLocalData(): Promise<void> {
     try {
-      await this.database.withExclusiveTransactionAsync(async (transaction) => {
-        // All user-owned tables cascade from the singleton profile.
-        await transaction.runAsync('DELETE FROM profiles');
-      });
+      // The single DELETE is atomic and its cascades use the configured connection.
+      await this.database.runAsync('DELETE FROM profiles');
     } catch (error) {
       throw new DatabaseOperationError('Local data could not be deleted.', error);
     }

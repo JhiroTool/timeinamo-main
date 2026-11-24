@@ -8,7 +8,7 @@ import { DateTimeField } from '@/features/setup/DateTimeField';
 import { useSetup } from '@/features/setup/useSetup';
 import { useDatabase } from '@/hooks/useDatabase';
 import { shareAttendanceCsv } from '@/services/AttendanceExportService';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, fontFamilies, radius, spacing } from '@/theme';
 import type { WorkDate } from '@/types/time';
 import { parseWorkDate, toWorkDate } from '@/utils/time';
 
@@ -112,8 +112,8 @@ export function AttendanceCsvExportSheet({ visible, onDismiss }: AttendanceCsvEx
       });
       onDismiss();
       Alert.alert('CSV export ready', `${filename} was passed to the native share sheet.`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'The CSV export could not be created.');
+    } catch {
+      setError('The CSV could not be exported. Try again or check that file sharing is available on this device.');
     } finally {
       setExporting(false);
     }
@@ -123,7 +123,9 @@ export function AttendanceCsvExportSheet({ visible, onDismiss }: AttendanceCsvEx
     <BottomSheet
       dismissDisabled={exporting}
       onDismiss={onDismiss}
-      title="Export Attendance CSV"
+      scrollable
+      title="Export CSV"
+      titleStyle={styles.sheetTitle}
       visible={visible}
     >
       <View style={styles.content}>
@@ -143,7 +145,7 @@ export function AttendanceCsvExportSheet({ visible, onDismiss }: AttendanceCsvEx
           <ScopeOption
             active={scope === 'custom'}
             description="Choose inclusive start and end dates"
-            label="Custom range"
+            label="Custom date range"
             onPress={() => setScope('custom')}
           />
         </View>
@@ -173,13 +175,13 @@ export function AttendanceCsvExportSheet({ visible, onDismiss }: AttendanceCsvEx
 
         <View style={styles.switchRow}>
           <View style={styles.switchCopy}>
-            <Text style={styles.switchTitle}>Include journal descriptions</Text>
+            <Text style={styles.switchTitle}>Include journal activities</Text>
             <Text style={styles.switchDescription}>
               Adds descriptions from journal entries sharing each attendance date.
             </Text>
           </View>
           <Switch
-            accessibilityLabel="Include journal descriptions"
+            accessibilityLabel="Include journal activities"
             onValueChange={setIncludeJournal}
             thumbColor="#FFFFFF"
             trackColor={{ false: colors.borderStrong, true: colors.primary }}
@@ -187,10 +189,11 @@ export function AttendanceCsvExportSheet({ visible, onDismiss }: AttendanceCsvEx
           />
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
         <Button
           fullWidth
           icon={scope === 'custom' ? CalendarRange : FileSpreadsheet}
+          labelStyle={styles.buttonLabel}
           loading={exporting}
           onPress={() => void exportCsv()}
           title="Create and share CSV"
@@ -201,6 +204,7 @@ export function AttendanceCsvExportSheet({ visible, onDismiss }: AttendanceCsvEx
 }
 
 const styles = StyleSheet.create({
+  sheetTitle: { fontFamily: fontFamilies.headingSemibold, fontWeight: 'normal' },
   content: { gap: spacing.md, paddingBottom: spacing.md },
   options: { gap: spacing.sm },
   option: {
@@ -226,8 +230,8 @@ const styles = StyleSheet.create({
   },
   radioActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   optionCopy: { flex: 1 },
-  optionTitle: { color: colors.text, ...typography.bodyStrong },
-  optionDescription: { color: colors.textSecondary, ...typography.caption },
+  optionTitle: { color: colors.text, fontFamily: fontFamilies.label, fontSize: 14 },
+  optionDescription: { color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 13 },
   dateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dateField: { minWidth: 150, flex: 1 },
   switchRow: {
@@ -240,7 +244,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   switchCopy: { minWidth: 0, flex: 1 },
-  switchTitle: { color: colors.text, ...typography.label },
-  switchDescription: { marginTop: spacing.xxs, color: colors.textSecondary, ...typography.caption },
-  error: { color: colors.error, ...typography.caption },
+  switchTitle: { color: colors.text, fontFamily: fontFamilies.label, fontSize: 14 },
+  switchDescription: { marginTop: spacing.xxs, color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 13 },
+  error: { color: colors.error, fontFamily: fontFamilies.body, fontSize: 13 },
+  buttonLabel: { flexShrink: 1, fontFamily: fontFamilies.label, fontWeight: 'normal' },
 });

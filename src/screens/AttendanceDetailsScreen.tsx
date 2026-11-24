@@ -14,7 +14,7 @@ import { useDatabase } from '@/hooks/useDatabase';
 import { calculateAttendanceDurations } from '@/services/attendanceCalculations.js';
 import { colors, fontFamilies, radius, spacing } from '@/theme';
 import type { AttendanceCorrection } from '@/types/models';
-import { toWorkDate } from '@/utils/time';
+import { formatWorkDate, toWorkDate } from '@/utils/time';
 
 const fieldLabels: Record<AttendanceCorrection['fieldName'], string> = {
   work_date: 'Attendance date',
@@ -44,6 +44,7 @@ export function AttendanceDetailsScreen() {
   const { data: setup } = useSetup();
   const timezone = setup?.workSettings.timezone ?? 'Asia/Manila';
   const hour12 = setup?.workSettings.timeFormat !== '24h';
+  const dateFormat = setup?.workSettings.dateFormat ?? 'mdy';
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<AttendanceDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +72,6 @@ export function AttendanceDetailsScreen() {
   const clockFormat = useMemo(() => new Intl.DateTimeFormat('en-US', {
     timeZone: timezone, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12,
   }), [timezone, hour12]);
-  const timestampFormat = useMemo(() => new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone, year: 'numeric', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12,
-  }), [timezone, hour12]);
 
   const elapsedSeconds = useMemo(() => {
     const record = details?.record;
@@ -86,16 +83,20 @@ export function AttendanceDetailsScreen() {
     }
   }, [details]);
 
+  function formatTimestamp(value: string) {
+    return `${formatWorkDate(toWorkDate(value, timezone), dateFormat)} · ${clockFormat.format(new Date(value))}`;
+  }
+
   function formatClock(value: string | null, workDate: string) {
     if (!value) return 'Not recorded';
-    return (toWorkDate(value, timezone) === workDate ? clockFormat : timestampFormat).format(new Date(value));
+    return toWorkDate(value, timezone) === workDate ? clockFormat.format(new Date(value)) : formatTimestamp(value);
   }
 
   function formatCorrection(field: AttendanceCorrection['fieldName'], value: string | null) {
     if (value === null) return 'Not recorded';
-    if (field === 'clock_in_at' || field === 'clock_out_at') return timestampFormat.format(new Date(value));
+    if (field === 'clock_in_at' || field === 'clock_out_at') return formatTimestamp(value);
     if (field === 'break_duration_seconds' || field === 'worked_duration_seconds') return formatAttendanceHours(Number(value), true);
-    if (field === 'work_date') return formatAttendanceDate(value, { month: 'short', day: 'numeric', year: 'numeric' });
+    if (field === 'work_date') return formatWorkDate(value, dateFormat);
     if (value === 'on_break') return 'On break';
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
@@ -118,7 +119,7 @@ export function AttendanceDetailsScreen() {
   }
 
   const record = details?.record;
-  const title = record ? formatAttendanceDate(record.workDate, { weekday: 'long', month: 'long', day: 'numeric' }) : 'Attendance record';
+  const title = record ? formatAttendanceDate(record.workDate, { weekday: 'long', month: 'long', day: 'numeric' }, dateFormat) : 'Attendance record';
 
   return (
     <Screen contentStyle={styles.screen}>
@@ -153,8 +154,9 @@ export function AttendanceDetailsScreen() {
           </View>
           <View style={styles.actions}>
             <Button icon={Pencil} onPress={() => router.push({ pathname: '/attendance/edit', params: { id: String(record.id) } })}
-              title="Edit Record" variant="outline" />
-            <Button icon={Trash2} onPress={() => setDeleteVisible(true)} title="Delete Record" variant="danger" />
+              style={styles.actionButton} title="Edit Record" variant="outline" />
+            <Button icon={Trash2} onPress={() => setDeleteVisible(true)} style={styles.actionButton}
+              title="Delete Record" variant="danger" />
           </View>
           {deleteError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{deleteError}</Text> : null}
 
@@ -164,14 +166,14 @@ export function AttendanceDetailsScreen() {
               details.corrections.map((correction) => (
                 <View key={correction.id} style={styles.auditRow}>
                   <Text style={styles.auditField}>{fieldLabels[correction.fieldName]}</Text>
-                  <Text style={styles.support}>{timestampFormat.format(new Date(correction.createdAt))}</Text>
+                  <Text style={styles.support}>{formatTimestamp(correction.createdAt)}</Text>
                   <Text style={styles.change}>{formatCorrection(correction.fieldName, correction.oldValue)} → {formatCorrection(correction.fieldName, correction.newValue)}</Text>
                   <Text style={styles.support}>{correction.reason}</Text>
                 </View>
               ))}
             <View style={styles.timestamps}>
-              <Text style={styles.support}>Created {timestampFormat.format(new Date(record.createdAt))}</Text>
-              <Text style={styles.support}>Updated {timestampFormat.format(new Date(record.updatedAt))}</Text>
+              <Text style={styles.support}>Created {formatTimestamp(record.createdAt)}</Text>
+              <Text style={styles.support}>Updated {formatTimestamp(record.updatedAt)}</Text>
             </View>
           </View>
         </>
@@ -206,7 +208,8 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   detailLabel: { flex: 1, color: colors.textSecondary, fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
   detailValue: { flex: 1, color: colors.text, textAlign: 'right', fontFamily: fontFamilies.label, fontSize: 14, lineHeight: 21, fontVariant: ['tabular-nums'] },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  actions: { flexDirection: 'row', gap: spacing.xs },
+  actionButton: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm },
   dialogActions: { flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.xs },
   error: { marginTop: spacing.sm, color: colors.error, fontFamily: fontFamilies.body },
   audit: { gap: spacing.sm, marginTop: spacing.lg },

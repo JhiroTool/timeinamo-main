@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, layout, radius, spacing, typography } from '@/theme';
+import { colors, fontFamilies, layout, radius, spacing, typography } from '@/theme';
 
 const days = [
   { value: 1, label: 'M', full: 'Monday' },
@@ -17,17 +17,19 @@ interface WeekdaySelectorProps {
   onChange: (value: number[]) => void;
   onBlur?: (() => void) | undefined;
   error?: string | undefined;
+  onboardingLayout?: 'single-row' | 'two-rows';
 }
 
-export function WeekdaySelector({ value, onChange, onBlur, error }: WeekdaySelectorProps) {
+export function WeekdaySelector({ value, onChange, onBlur, error, onboardingLayout }: WeekdaySelectorProps) {
   function toggle(day: number) {
     onChange(value.includes(day) ? value.filter((item) => item !== day) : [...value, day]);
+    if (onboardingLayout) onBlur?.();
   }
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>Working days</Text>
-      <View style={styles.days}>
+      <Text style={[styles.label, onboardingLayout && styles.compactLabel]}>{onboardingLayout ? 'Working Days' : 'Working days'}</Text>
+      <View style={[styles.days, onboardingLayout && styles.compactDays, onboardingLayout === 'two-rows' && styles.wrappedDays]}>
         {days.map((day) => {
           const selected = value.includes(day.value);
           return (
@@ -40,16 +42,17 @@ export function WeekdaySelector({ value, onChange, onBlur, error }: WeekdaySelec
               onPress={() => toggle(day.value)}
               style={({ pressed }) => [
                 styles.day,
+                onboardingLayout && styles.compactDay,
                 selected && styles.daySelected,
                 pressed && styles.dayPressed,
               ]}
             >
-              <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>{day.label}</Text>
+              <Text style={[styles.dayLabel, onboardingLayout && styles.compactLabel, selected && styles.dayLabelSelected]}>{day.label}</Text>
             </Pressable>
           );
         })}
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text accessibilityLiveRegion="polite" style={[styles.error, onboardingLayout && styles.compactError]}>{error}</Text> : null}
     </View>
   );
 }
@@ -95,5 +98,10 @@ const styles = StyleSheet.create({
     color: colors.error,
     ...typography.caption,
   },
+  compactLabel: { fontFamily: fontFamilies.label, fontWeight: 'normal' },
+  compactDays: { columnGap: 2, rowGap: 6 },
+  wrappedDays: { maxWidth: 4 * layout.minimumTouchTarget + 3 * 6, columnGap: 6 },
+  compactDay: { borderRadius: radius.md },
+  compactError: { fontFamily: fontFamilies.body, fontWeight: 'normal' },
 });
 

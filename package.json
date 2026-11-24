@@ -6,8 +6,8 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "check:db": "node scripts/validate-migrations.mjs",
     "check": "npm run typecheck && npm run check:db"
@@ -25,6 +25,7 @@
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.32",
     "expo-sharing": "~58.0.23",
+    "expo-splash-screen": "~58.0.14",
     "expo-sqlite": "~58.0.18",
     "expo-status-bar": "~58.0.5",
     "lucide-react-native": "^1.77.0",

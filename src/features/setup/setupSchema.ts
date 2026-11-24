@@ -67,7 +67,7 @@ export const setupSchema = z
         path: ['workEnd'],
         message: 'Time out must be later than time in.',
       });
-    } else if (end - start - breakMinutes <= 0) {
+    } else if (scheduledCreditedMinutes(start, end, breakMinutes) <= 0) {
       context.addIssue({
         code: 'custom',
         path: ['defaultBreakMinutes'],
@@ -110,6 +110,10 @@ export function minutesToTime(value: number): string {
   return `${hours}:${minutes}`;
 }
 
+export function scheduledCreditedMinutes(start: number, end: number, breakMinutes: number): number {
+  return end - start - breakMinutes;
+}
+
 export function workdaysToMask(days: readonly number[]): number {
   return days.reduce((mask, day) => mask | (1 << day), 0);
 }
@@ -131,7 +135,7 @@ export function toSaveSetupInput(values: SetupFormValues): SaveSetupInput {
     workdaysMask: workdaysToMask(values.workdays),
     workStartMinutes: start,
     workEndMinutes: end,
-    targetMinutes: end - start - breakMinutes,
+    targetMinutes: scheduledCreditedMinutes(start, end, breakMinutes),
     defaultBreakMinutes: breakMinutes,
     timezone: values.timezone,
     timeFormat: values.timeFormat,
@@ -150,7 +154,7 @@ export function setupDataToFormValues(data: SetupData): SetupFormValues {
     defaultBreakMinutes: String(data.workSettings.defaultBreakMinutes),
     internshipStartDate: data.profile.internshipStartDate ?? '',
     requiredHours: data.profile.requiredMinutes
-      ? String(data.profile.requiredMinutes / 60)
+      ? String(Number((data.profile.requiredMinutes / 60).toFixed(2)))
       : '',
     timezone: data.workSettings.timezone,
     timeFormat: data.workSettings.timeFormat as TimeFormat,

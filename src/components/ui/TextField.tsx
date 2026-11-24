@@ -3,13 +3,14 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 
-import { colors, layout, radius, spacing, typography } from '@/theme';
+import { colors, fontFamilies, layout, radius, spacing, typography } from '@/theme';
 
 interface TextFieldProps extends TextInputProps {
   label: string;
   helperText?: string | undefined;
   error?: string | undefined;
   icon?: LucideIcon;
+  compact?: boolean;
 }
 
 export function TextField({
@@ -17,6 +18,7 @@ export function TextField({
   helperText,
   error,
   icon: Icon,
+  compact = false,
   onFocus,
   onBlur,
   accessibilityLabel,
@@ -28,10 +30,11 @@ export function TextField({
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, compact && styles.compactLabel]}>{label}</Text>
       <View
         style={[
           styles.inputFrame,
+          compact && styles.compactFrame,
           focused && styles.inputFrameFocused,
           error ? styles.inputFrameError : null,
         ]}
@@ -42,7 +45,7 @@ export function TextField({
           accessibilityState={{ disabled: props.editable === false }}
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
-          style={[styles.input, style]}
+          style={[styles.input, compact && styles.compactInput, style]}
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
@@ -55,7 +58,8 @@ export function TextField({
         />
       </View>
       {supportingText ? (
-        <Text style={[styles.supporting, error ? styles.error : null]}>{supportingText}</Text>
+        <Text accessibilityLiveRegion={error ? 'polite' : 'none'}
+          style={[styles.supporting, compact && styles.compactSupporting, error && styles.error]}>{supportingText}</Text>
       ) : null}
     </View>
   );
@@ -104,5 +108,9 @@ const styles = StyleSheet.create({
   error: {
     color: colors.error,
   },
+  compactLabel: { fontFamily: fontFamilies.label, fontWeight: 'normal' },
+  compactFrame: { borderRadius: radius.md, backgroundColor: colors.surface },
+  compactInput: { fontFamily: fontFamilies.body, fontWeight: 'normal', fontSize: 15 },
+  compactSupporting: { fontFamily: fontFamilies.body, fontWeight: 'normal' },
 });
 

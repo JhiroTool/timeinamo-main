@@ -6,7 +6,7 @@
     "icon": "./assets/images/TI LOGO.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#F7F9FC",
+    "backgroundColor": "#FFFFFF",
     "scheme": "timeinamo",
     "ios": {
       "supportsTablet": true,
@@ -21,6 +21,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/TI LOGO 432.png",
+          "imageWidth": 144,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
       "expo-sqlite",
       "expo-status-bar",
       "@react-native-community/datetimepicker",

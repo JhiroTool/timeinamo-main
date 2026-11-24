@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentRef, ReactNode, Ref } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ interface ScreenProps {
   includeBottomInset?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   branded?: boolean;
+  scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
 }
 
 export function Screen({
@@ -22,6 +23,7 @@ export function Screen({
   includeBottomInset = false,
   contentStyle,
   branded = false,
+  scrollRef,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
   const horizontalPadding = width < 360 ? spacing.md : spacing.lg;
@@ -31,6 +33,7 @@ export function Screen({
 
   const content = scrollable ? (
     <ScrollView
+      ref={scrollRef}
       style={styles.scroller}
       contentContainerStyle={styles.scrollContent}
       contentInsetAdjustmentBehavior="never"

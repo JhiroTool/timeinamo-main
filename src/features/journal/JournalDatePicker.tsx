@@ -5,14 +5,15 @@ import { Keyboard, Platform, Pressable, StyleSheet, Text } from 'react-native';
 
 import { BottomSheet, Button } from '@/components/ui';
 import { colors, fontFamilies, layout, radius } from '@/theme';
-import { parseWorkDate } from '@/utils/time';
+import type { DateFormat } from '@/types/models';
+import { formatWorkDate, parseWorkDate } from '@/utils/time';
 
 import { useJournal } from './JournalContext';
 
 export const journalDateLabel = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' } as const;
 
-export function formatJournalDate(value: string, options: Intl.DateTimeFormatOptions = journalDateLabel, locale = 'en-US') {
-  return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(new Date(`${value}T00:00:00.000Z`));
+export function formatJournalDate(value: string, preference: DateFormat, options: Intl.DateTimeFormatOptions = journalDateLabel) {
+  return formatWorkDate(value, preference, options);
 }
 
 function pickerDate(value: string) {
@@ -35,8 +36,7 @@ export function JournalDatePicker({ value, today, onChange, compact = false }: {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => pickerDate(value || today));
   const label = compact ? 'Filter by date' : 'Date';
-  const dateLabel = value ? formatJournalDate(value, { month: 'short', day: 'numeric', year: 'numeric' },
-    dateFormat === 'dmy' ? 'en-GB' : dateFormat === 'ymd' ? 'en-CA' : 'en-US') : '';
+  const dateLabel = value ? formatWorkDate(value, dateFormat) : '';
 
   function openPicker() {
     Keyboard.dismiss();

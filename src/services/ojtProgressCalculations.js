@@ -2,7 +2,7 @@
  * @param {number} completedSeconds
  * @param {number} requiredMinutes
  * @param {number} completedWorkdays
- * @param {number} scheduledMinutesPerDay
+ * @param {number | null} scheduledMinutesPerDay
  */
 export function calculateOjtProgress(
   completedSeconds,
@@ -19,7 +19,8 @@ export function calculateOjtProgress(
   if (!Number.isSafeInteger(completedWorkdays) || completedWorkdays < 0) {
     throw new RangeError('Completed workdays must be a non-negative integer.');
   }
-  if (!Number.isSafeInteger(scheduledMinutesPerDay) || scheduledMinutesPerDay <= 0) {
+  if (scheduledMinutesPerDay !== null &&
+      (!Number.isSafeInteger(scheduledMinutesPerDay) || scheduledMinutesPerDay <= 0)) {
     throw new RangeError('Scheduled credited minutes must be a positive integer.');
   }
 
@@ -34,7 +35,9 @@ export function calculateOjtProgress(
     estimatedRemainingWorkdays:
       remainingSeconds === 0
         ? 0
-        : Math.ceil(remainingSeconds / (scheduledMinutesPerDay * 60)),
+        : scheduledMinutesPerDay === null
+          ? null
+          : Math.ceil(remainingSeconds / (scheduledMinutesPerDay * 60)),
     goalCompleted: completedSeconds >= requiredSeconds,
   };
 }
@@ -70,14 +73,22 @@ export function buildRecentWeeklyTotals(rows, currentWorkDate, weekCount = 6) {
   const totals = Array.from({ length: weekCount }, (_, index) => ({
     weekStart: shiftWorkDate(firstWeek, index * 7),
     creditedSeconds: 0,
+    workDates: new Set(),
   }));
   const byWeek = new Map(totals.map((item) => [item.weekStart, item]));
   for (const row of rows) {
     const weekStart = getMondayWeekStart(row.workDate);
     const target = byWeek.get(weekStart);
-    if (target) target.creditedSeconds += row.creditedSeconds;
+    if (target) {
+      target.creditedSeconds += row.creditedSeconds;
+      target.workDates.add(row.workDate);
+    }
   }
-  return totals;
+  return totals.map(({ weekStart, creditedSeconds, workDates }) => ({
+    weekStart,
+    creditedSeconds,
+    completedWorkdays: workDates.size,
+  }));
 }
 
 /** @param {number} seconds */
@@ -86,5 +97,12 @@ export function formatHoursMinutes(seconds) {
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+}
+
+const decimalHours = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+/** @param {number} seconds */
+export function formatProgressHours(seconds) {
+  return seconds > 0 && seconds < 180 ? '<0.1' : decimalHours.format(seconds / 3600);
 }
 

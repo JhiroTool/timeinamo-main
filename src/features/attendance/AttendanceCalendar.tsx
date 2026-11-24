@@ -4,16 +4,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { AttendanceHistoryRecord } from '@/database/repositories';
 import { colors, fontFamilies, layout, radius, spacing } from '@/theme';
+import type { DateFormat } from '@/types/models';
+import { createWorkDateFormatter } from '@/utils/time';
 
-import { formatAttendanceDate, getAttendanceWeeks, workDateToUtc } from './attendancePresentation';
+import { formatAttendanceDate, getAttendanceWeeks } from './attendancePresentation';
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const dayLabel = new Intl.DateTimeFormat('en-US', {
-  weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
-});
+const dayLabel = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' } as const;
 
 export function AttendanceCalendar({
   month,
+  dateFormat,
   today,
   selectedDate,
   recordsByDate,
@@ -22,6 +23,7 @@ export function AttendanceCalendar({
   onNext,
 }: {
   month: string;
+  dateFormat: DateFormat;
   today: string;
   selectedDate: string;
   recordsByDate: ReadonlyMap<string, AttendanceHistoryRecord>;
@@ -30,6 +32,7 @@ export function AttendanceCalendar({
   onNext: (() => void) | undefined;
 }) {
   const weeks = useMemo(() => getAttendanceWeeks(month), [month]);
+  const formatDayLabel = useMemo(() => createWorkDateFormatter(dateFormat, dayLabel), [dateFormat]);
   return (
     <View style={styles.calendar}>
       <View style={styles.monthRow}>
@@ -38,7 +41,7 @@ export function AttendanceCalendar({
           <ChevronLeft color={colors.primaryDark} size={21} />
         </Pressable>
         <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={styles.month}>
-          {formatAttendanceDate(`${month}-01`, { month: 'long', year: 'numeric' })}
+          {formatAttendanceDate(`${month}-01`, { month: 'long', year: 'numeric' }, dateFormat)}
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Next month" accessibilityState={{ disabled: !onNext }}
           disabled={!onNext} onPress={onNext} style={({ pressed }) => [styles.monthButton, pressed && styles.pressed]}>
@@ -60,7 +63,7 @@ export function AttendanceCalendar({
             const isFuture = date > today;
             const status = record ? (record.status === 'completed' ? 'Completed' : 'Incomplete')
               : isFuture ? 'Future date' : 'No record';
-            const label = [dayLabel.format(workDateToUtc(date)), isToday && 'Today', status, record?.isAdjusted && 'Adjusted']
+            const label = [formatDayLabel(date), isToday && 'Today', status, record?.isAdjusted && 'Adjusted']
               .filter(Boolean).join(', ');
 
             return (

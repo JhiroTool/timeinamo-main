@@ -1,8 +1,8 @@
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { BookOpen, Plus, Search, X } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AccessibilityInfo, Keyboard, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Keyboard, Platform, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import type { ActivityLog } from '@/types/models';
 import { parseWorkDate, toWorkDate } from '@/utils/time';
 
 const emptyEntries: ActivityLog[] = [];
+const journalPageSize = 40;
 
 function JournalLink({ label, onPress }: { label: string; onPress: () => void }) {
   return (
@@ -23,6 +24,23 @@ function JournalLink({ label, onPress }: { label: string; onPress: () => void })
     </Pressable>
   );
 }
+
+const JournalEntryRow = memo(function JournalEntryRow({ entry, onOpen }: {
+  entry: ActivityLog;
+  onOpen: (entry: ActivityLog) => void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={entry.title} accessibilityHint="Opens activity details"
+      onPress={() => onOpen(entry)} style={({ pressed }) => [styles.entry, pressed && styles.entryPressed]}>
+      <Text style={styles.entryTitle}>{entry.title}</Text>
+      <Text numberOfLines={3} style={styles.description}>{entry.content}</Text>
+      {entry.attendanceSessionId !== null ? (
+        <Text style={styles.entryMeta}>{entry.attendanceCreditedSeconds === null ? 'Linked to attendance'
+          : `${formatAttendanceHours(entry.attendanceCreditedSeconds)} credited · Attendance`}</Text>
+      ) : null}
+    </Pressable>
+  );
+});
 
 function AddActivity({ onPress }: { onPress: () => void }) {
   const scale = useSharedValue(1);
@@ -59,7 +77,7 @@ function AddActivity({ onPress }: { onPress: () => void }) {
 export function JournalScreen() {
   const router = useRouter();
   const focused = useIsFocused();
-  const { repository, profileId, timezone, notice, setNotice } = useJournal();
+  const { repository, profileId, timezone, dateFormat, notice, setNotice } = useJournal();
   const today = toWorkDate(new Date(), timezone);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
@@ -67,8 +85,9 @@ export function JournalScreen() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [reload, setReload] = useState(0);
-  const [result, setResult] = useState<{ entries: ActivityLog[]; key: string } | null>(null);
+  const [result, setResult] = useState<{ entries: ActivityLog[]; hasMore: boolean; key: string } | null>(null);
   const [failedKey, setFailedKey] = useState<string | null>(null);
+  const loadingMore = useRef(false);
   const queryKey = JSON.stringify([profileId, query, filterDate]);
   const waiting = search.trim() !== query || (result?.key !== queryKey && failedKey !== queryKey);
   const filtered = Boolean(search.trim() || filterDate);
@@ -81,13 +100,40 @@ export function JournalScreen() {
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
+    loadingMore.current = true;
     setFailedKey(null);
-    void repository.list(profileId, { search: query, workDate: filterDate ? parseWorkDate(filterDate) : null }).then(
-      (entries) => { if (!cancelled) setResult({ entries, key: queryKey }); },
+    void repository.list(profileId, {
+      search: query,
+      workDate: filterDate ? parseWorkDate(filterDate) : null,
+      limit: journalPageSize,
+    }).then(
+      (entries) => { if (!cancelled) setResult({ entries, hasMore: entries.length === journalPageSize, key: queryKey }); },
       () => { if (!cancelled) setFailedKey(queryKey); },
-    );
-    return () => { cancelled = true; };
+    ).finally(() => { if (!cancelled) loadingMore.current = false; });
+    return () => { cancelled = true; loadingMore.current = false; };
   }, [filterDate, profileId, query, queryKey, reload, repository]));
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore.current || !result?.hasMore || result.key !== queryKey) return;
+    loadingMore.current = true;
+    try {
+      const next = await repository.list(profileId, {
+        search: query,
+        workDate: filterDate ? parseWorkDate(filterDate) : null,
+        limit: journalPageSize,
+        offset: result.entries.length,
+      });
+      setResult((current) => current?.key === queryKey ? {
+        entries: [...current.entries, ...next],
+        hasMore: next.length === journalPageSize,
+        key: queryKey,
+      } : current);
+    } catch {
+      // Keep the current page visible; a later scroll can retry the next page.
+    } finally {
+      loadingMore.current = false;
+    }
+  }, [filterDate, profileId, query, queryKey, repository, result]);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -116,10 +162,15 @@ export function JournalScreen() {
     router.push({ pathname: '/journal/edit', params: filterDate ? { date: filterDate } : {} });
   }
 
-  function openEntry(entry: ActivityLog) {
+  const openEntry = useCallback((entry: ActivityLog) => {
     Keyboard.dismiss();
     router.push({ pathname: '/journal/[id]', params: { id: String(entry.id) } });
-  }
+  }, [router]);
+
+  const renderEntry = useCallback(
+    ({ item }: { item: ActivityLog }) => <JournalEntryRow entry={item} onOpen={openEntry} />,
+    [openEntry],
+  );
 
   function clearSearch() {
     setSearch('');
@@ -138,9 +189,15 @@ export function JournalScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         keyExtractor={(entry) => String(entry.id)}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        onEndReached={() => void loadMore()}
+        onEndReachedThreshold={0.35}
+        removeClippedSubviews={Platform.OS === 'android'}
         sections={sections}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
+        windowSize={7}
         ListHeaderComponent={
           <>
             <View style={styles.heading}>
@@ -165,7 +222,7 @@ export function JournalScreen() {
             </View>
             {filterDate ? (
               <View style={styles.filterRow}>
-                <Text style={styles.filterDate}>{formatJournalDate(filterDate)}</Text>
+                <Text style={styles.filterDate}>{formatJournalDate(filterDate, dateFormat)}</Text>
                 <JournalLink label="Clear date" onPress={() => setFilterDate('')} />
               </View>
             ) : null}
@@ -174,23 +231,13 @@ export function JournalScreen() {
         renderSectionHeader={({ section }) => (
           <View style={styles.dateGroup}>
             <View style={styles.dateMarker} />
-            <Text accessibilityRole="header" style={styles.dateHeading}>{formatJournalDate(section.date, {
+            <Text accessibilityRole="header" style={styles.dateHeading}>{formatJournalDate(section.date, dateFormat, {
               weekday: 'long', month: 'long', day: 'numeric',
               ...(section.date.slice(0, 4) !== today.slice(0, 4) ? { year: 'numeric' } : {}),
             })}</Text>
           </View>
         )}
-        renderItem={({ item }) => (
-          <Pressable accessibilityRole="button" accessibilityLabel={item.title} accessibilityHint="Opens activity details"
-            onPress={() => openEntry(item)} style={({ pressed }) => [styles.entry, pressed && styles.entryPressed]}>
-            <Text style={styles.entryTitle}>{item.title}</Text>
-            <Text numberOfLines={3} style={styles.description}>{item.content}</Text>
-            {item.attendanceSessionId !== null ? (
-              <Text style={styles.entryMeta}>{item.attendanceCreditedSeconds === null ? 'Linked to attendance'
-                : `${formatAttendanceHours(item.attendanceCreditedSeconds)} credited · Attendance`}</Text>
-            ) : null}
-          </Pressable>
-        )}
+        renderItem={renderEntry}
         ListEmptyComponent={
           waiting ? (
             <View accessibilityLabel="Loading journal" accessible accessibilityState={{ busy: true }} style={styles.empty}>

@@ -1,4 +1,37 @@
+import type { DateFormat, TimeFormat } from '@/types/models';
 import type { UtcTimestamp, WorkDate } from '@/types/time';
+
+export function formatWorkDate(
+  workDate: string,
+  preference: DateFormat,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  return createWorkDateFormatter(preference, options)(workDate);
+}
+
+export function createWorkDateFormatter(
+  preference: DateFormat,
+  options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' },
+): (workDate: string) => string {
+  const locale = preference === 'dmy' ? 'en-GB' : 'en-US';
+  const formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' });
+  return (workDate) => {
+    const date = new Date(`${workDate}T00:00:00.000Z`);
+    if (preference !== 'ymd') return formatter.format(date);
+
+    const parts = formatter.formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+    const label = [get('year'), get('month'), get('day')].filter(Boolean).join(' ');
+    const weekday = get('weekday');
+    return weekday ? [weekday, label].filter(Boolean).join(', ') : label;
+  };
+}
+
+export function formatScheduleTime(value: string, preference: TimeFormat): string {
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric', minute: '2-digit', hourCycle: preference === '12h' ? 'h12' : 'h23', timeZone: 'UTC',
+  }).format(new Date(`2000-01-01T${value}:00.000Z`));
+}
 
 export function toUtcTimestamp(value: Date | string = new Date()): UtcTimestamp {
   const date = value instanceof Date ? value : new Date(value);

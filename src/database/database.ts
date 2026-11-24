@@ -3,10 +3,18 @@ import * as SQLite from 'expo-sqlite';
 import type { Database } from '@/types/database';
 import { toUtcTimestamp } from '@/utils/time';
 
-import { DatabaseInitializationError } from './errors';
+import { DatabaseInitializationError, DatabaseRecoveryRequiredError } from './errors';
 import { latestSchemaVersion, migrations } from './migrations';
+import { verifyProfileRelationships } from './recoverMissingProfile';
 
 const DATABASE_NAME = 'timeinamo.db';
+type InitializationStage = 'open' | 'configure' | 'migrate' | 'verify';
+const stageCodes: Record<InitializationStage, string> = {
+  open: 'DB-OPEN',
+  configure: 'DB-CONFIGURE',
+  migrate: 'DB-MIGRATE',
+  verify: 'DB-VERIFY',
+};
 
 let databasePromise: Promise<Database> | null = null;
 
@@ -25,11 +33,26 @@ interface MigrationRow {
 
 async function configureConnection(database: Database): Promise<void> {
   await database.execAsync(`
+    PRAGMA busy_timeout = 5000;
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 5000;
     PRAGMA synchronous = NORMAL;
   `);
+}
+
+async function readSchemaVersion(database: Database): Promise<number> {
+  const versionRow = await database.getFirstAsync<UserVersionRow>('PRAGMA user_version');
+  const currentVersion = versionRow?.user_version;
+  if (currentVersion === undefined || !Number.isInteger(currentVersion) || currentVersion < 0) {
+    throw new Error('Could not read a valid SQLite schema version.');
+  }
+
+  if (currentVersion > latestSchemaVersion) {
+    throw new Error(
+      `Database schema ${currentVersion} is newer than supported version ${latestSchemaVersion}.`,
+    );
+  }
+  return currentVersion;
 }
 
 async function applyMigrations(database: Database): Promise<void> {
@@ -39,48 +62,30 @@ async function applyMigrations(database: Database): Promise<void> {
     }
   });
 
-  const versionRow = await database.getFirstAsync<UserVersionRow>('PRAGMA user_version');
-  const currentVersion = versionRow?.user_version ?? 0;
+  if (await readSchemaVersion(database) === latestSchemaVersion) return;
 
-  if (currentVersion > latestSchemaVersion) {
-    throw new Error(
-      `Database schema ${currentVersion} is newer than supported version ${latestSchemaVersion}.`,
-    );
-  }
-
-  for (const migration of migrations) {
-    if (migration.version <= currentVersion) {
-      continue;
-    }
-
-    await database.withExclusiveTransactionAsync(async (transaction) => {
-      const transactionVersion = await transaction.getFirstAsync<UserVersionRow>(
-        'PRAGMA user_version',
-      );
-      if ((transactionVersion?.user_version ?? 0) !== migration.version - 1) {
-        throw new Error(`Unexpected schema version before migration ${migration.version}.`);
-      }
-
-      await transaction.execAsync(migration.sql);
-      await transaction.runAsync(
+  // Startup owns this connection until verification completes.
+  await database.execAsync('BEGIN IMMEDIATE');
+  try {
+    const currentVersion = await readSchemaVersion(database);
+    for (const migration of migrations.slice(currentVersion)) {
+      await database.execAsync(migration.sql);
+      await database.runAsync(
         'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
         migration.version,
         migration.name,
         toUtcTimestamp(),
       );
-      await transaction.execAsync(`PRAGMA user_version = ${migration.version}`);
-    });
+      await database.execAsync(`PRAGMA user_version = ${migration.version}`);
+    }
+    await database.execAsync('COMMIT');
+  } catch (error) {
+    await database.execAsync('ROLLBACK').catch(() => undefined);
+    throw error;
   }
 }
 
-async function verifyDatabase(database: Database): Promise<void> {
-  const foreignKeyFailures = await database.getAllAsync<Record<string, unknown>>(
-    'PRAGMA foreign_key_check',
-  );
-  if (foreignKeyFailures.length > 0) {
-    throw new Error('Foreign key verification failed.');
-  }
-
+async function verifyDatabase(database: Database, recoverMissingProfile: boolean): Promise<void> {
   const integrity = await database.getFirstAsync<IntegrityRow>('PRAGMA quick_check');
   if (integrity?.quick_check !== 'ok') {
     throw new Error(`SQLite integrity check failed: ${integrity?.quick_check ?? 'unknown error'}`);
@@ -99,25 +104,37 @@ async function verifyDatabase(database: Database): Promise<void> {
   if (!migrationLedgerMatches) {
     throw new Error('The database migration ledger does not match the application schema.');
   }
+  await verifyProfileRelationships(database, recoverMissingProfile);
 }
 
-async function openAndInitializeDatabase(): Promise<Database> {
+async function openAndInitializeDatabase(recoverMissingProfile: boolean): Promise<Database> {
   let database: Database | null = null;
+  let stage: InitializationStage = 'open';
   try {
     database = await SQLite.openDatabaseAsync(DATABASE_NAME);
+    stage = 'configure';
     await configureConnection(database);
+    stage = 'migrate';
     await applyMigrations(database);
-    await verifyDatabase(database);
+    stage = 'verify';
+    await verifyDatabase(database, recoverMissingProfile);
     return database;
   } catch (error) {
     await database?.closeAsync().catch(() => undefined);
-    throw new DatabaseInitializationError('Could not initialize the local database.', error);
+    const code = stageCodes[stage];
+    if (__DEV__) {
+      const detail = error instanceof DatabaseRecoveryRequiredError ? error.cause : error;
+      const message = detail instanceof Error ? detail.message : String(detail);
+      console.warn(`[TimeInamo ${code}] SQLite startup failed: ${message}`);
+    }
+    if (error instanceof DatabaseRecoveryRequiredError) throw error;
+    throw new DatabaseInitializationError(`Could not initialize the local database (${code}).`, error);
   }
 }
 
-export function initializeDatabase(): Promise<Database> {
+export function initializeDatabase({ recoverMissingProfile = false } = {}): Promise<Database> {
   if (!databasePromise) {
-    databasePromise = openAndInitializeDatabase().catch((error: unknown) => {
+    databasePromise = openAndInitializeDatabase(recoverMissingProfile).catch((error: unknown) => {
       databasePromise = null;
       throw error;
     });

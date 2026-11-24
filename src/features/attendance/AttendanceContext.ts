@@ -5,7 +5,6 @@ import type { AttendanceSession } from '@/types/models';
 export interface AttendanceContextValue {
   status: 'loading' | 'ready' | 'error';
   activeSession: AttendanceSession | null;
-  recentSessions: AttendanceSession[];
   error: Error | null;
   operation: 'time_in' | 'time_out' | 'update_break' | null;
   refresh: () => Promise<void>;

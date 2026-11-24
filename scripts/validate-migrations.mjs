@@ -9,10 +9,12 @@ import { attendanceInvariantsSql } from '../src/database/migrations/002_attendan
 import { setupPreferencesSql } from '../src/database/migrations/003_setup_preferences.js';
 import { attendanceHistorySql } from '../src/database/migrations/004_attendance_history.js';
 import { journalReportingSql } from '../src/database/migrations/005_journal_reporting.js';
+import { performanceIndexesSql } from '../src/database/migrations/006_performance_indexes.js';
 import { calculateAttendanceDurations } from '../src/services/attendanceCalculations.js';
 import {
   buildRecentWeeklyTotals,
   calculateOjtProgress,
+  formatProgressHours,
   getMondayWeekStart,
 } from '../src/services/ojtProgressCalculations.js';
 import {
@@ -28,6 +30,7 @@ const migrations = [
   { version: 3, name: 'setup_preferences', sql: setupPreferencesSql },
   { version: 4, name: 'attendance_history', sql: attendanceHistorySql },
   { version: 5, name: 'journal_reporting', sql: journalReportingSql },
+  { version: 6, name: 'performance_indexes', sql: performanceIndexesSql },
 ];
 
 const testDirectory = mkdtempSync(join(tmpdir(), 'timeinamo-db-check-'));
@@ -67,6 +70,8 @@ for (const index of [
   'uq_attendance_single_active',
   'idx_activity_logs_profile_search',
   'idx_activity_logs_attendance',
+  'idx_attendance_completed_timeline',
+  'idx_activity_logs_profile_timeline',
 ]) {
   assert(objects.some((object) => object.type === 'index' && object.name === index));
 }
@@ -152,6 +157,18 @@ assert.equal(partialProgress.remainingSeconds, 360000);
 assert.equal(partialProgress.estimatedRemainingWorkdays, 17);
 assert.equal(partialProgress.averageSecondsPerDay, 21600);
 
+const exactProgress = calculateOjtProgress(1440000, 24000, 60, null);
+assert.equal(exactProgress.percentage, 100);
+assert.equal(exactProgress.goalCompleted, true);
+assert.equal(exactProgress.estimatedRemainingWorkdays, 0);
+const unscheduledProgress = calculateOjtProgress(1080000, 24000, 50, null);
+assert.equal(unscheduledProgress.remainingSeconds, partialProgress.remainingSeconds);
+assert.equal(unscheduledProgress.estimatedRemainingWorkdays, null);
+assert.throws(() => calculateOjtProgress(1080000, 24000, 50, 0));
+assert.equal(formatProgressHours(0), '0');
+assert.equal(formatProgressHours(60), '<0.1');
+assert.equal(formatProgressHours(455400), '126.5');
+
 const exceededProgress = calculateOjtProgress(1620000, 24000, 60, 360);
 assert.equal(exceededProgress.percentage, 112.5);
 assert.equal(exceededProgress.remainingSeconds, 0);
@@ -165,13 +182,15 @@ assert.deepEqual(
       { workDate: '2026-11-16', creditedSeconds: 3600 },
       { workDate: '2026-11-22', creditedSeconds: 7200 },
       { workDate: '2026-11-23', creditedSeconds: 1800 },
+      { workDate: '2026-11-23', creditedSeconds: 3600 },
     ],
     '2026-11-23',
-    2,
+    3,
   ),
   [
-    { weekStart: '2026-11-16', creditedSeconds: 10800 },
-    { weekStart: '2026-11-23', creditedSeconds: 1800 },
+    { weekStart: '2026-11-09', creditedSeconds: 0, completedWorkdays: 0 },
+    { weekStart: '2026-11-16', creditedSeconds: 10800, completedWorkdays: 2 },
+    { weekStart: '2026-11-23', creditedSeconds: 5400, completedWorkdays: 1 },
   ],
 );
 assert.throws(() =>
@@ -202,7 +221,7 @@ assert.throws(() =>
 
 assert.equal(database.prepare('PRAGMA foreign_key_check').all().length, 0);
 assert.equal(database.prepare('PRAGMA quick_check').get().quick_check, 'ok');
-assert.equal(database.prepare('PRAGMA user_version').get().user_version, 5);
+assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
 
 database.prepare(`
   UPDATE profiles
@@ -277,6 +296,54 @@ assert.equal(
     .get().count,
   1,
 );
+
+const completedTimelinePlan = database.prepare(`
+  EXPLAIN QUERY PLAN
+  SELECT * FROM attendance_sessions INDEXED BY idx_attendance_completed_timeline
+  WHERE profile_id = ? AND deleted_at IS NULL AND status = 'completed'
+  ORDER BY work_date DESC, clock_in_at DESC LIMIT 3
+`).all(1).map((step) => step.detail).join(' ');
+assert.match(completedTimelinePlan, /idx_attendance_completed_timeline/);
+
+const journalTimelinePlan = database.prepare(`
+  EXPLAIN QUERY PLAN
+  SELECT * FROM activity_logs
+  WHERE profile_id = ?
+  ORDER BY work_date DESC, created_at DESC, id DESC LIMIT 40 OFFSET 0
+`).all(1).map((step) => step.detail).join(' ');
+assert.match(journalTimelinePlan, /idx_activity_logs_profile_timeline/);
+
+database.exec('SAVEPOINT journal_pagination_fixture;');
+for (let index = 0; index < 118; index += 1) {
+  const minute = String(Math.floor(index / 60)).padStart(2, '0');
+  const second = String(index % 60).padStart(2, '0');
+  const timestamp = `2026-01-02T10:${minute}:${second}.000Z`;
+  insertJournal.run(
+    '2026-01-02',
+    `Pagination entry ${index + 1}`,
+    `Synthetic journal description ${index + 1}`,
+    null,
+    null,
+    timestamp,
+    timestamp,
+  );
+}
+const journalFixtureCount = database.prepare('SELECT COUNT(*) AS count FROM activity_logs').get().count;
+const firstJournalPage = database.prepare(`
+  SELECT id FROM activity_logs
+  WHERE profile_id = 1
+  ORDER BY work_date DESC, created_at DESC, id DESC LIMIT 40 OFFSET 0
+`).all();
+const secondJournalPage = database.prepare(`
+  SELECT id FROM activity_logs
+  WHERE profile_id = 1
+  ORDER BY work_date DESC, created_at DESC, id DESC LIMIT 40 OFFSET 40
+`).all();
+assert.equal(journalFixtureCount, 120);
+assert.equal(firstJournalPage.length, 40);
+assert.equal(secondJournalPage.length, 40);
+assert.equal(new Set([...firstJournalPage, ...secondJournalPage].map((row) => row.id)).size, 80);
+database.exec('ROLLBACK TO journal_pagination_fixture; RELEASE journal_pagination_fixture;');
 assert.throws(() =>
   insertJournal.run(
     '2026-01-03',
@@ -490,6 +557,6 @@ database.exec('ROLLBACK;');
 database.close();
 rmSync(testDirectory, { recursive: true, force: true });
 console.log(
-  'Database integrity, journal CRUD/search/persistence, CSV safety/accuracy, progress calculations, and restart persistence validated successfully.',
+  'Database integrity, indexed query plans, 120-row journal pagination (40-row pages), CRUD/search/persistence, CSV safety/accuracy, progress calculations, and restart persistence validated successfully.',
 );
 

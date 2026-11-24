@@ -9,15 +9,16 @@ import Animated, {
 
 import { BottomSheet, Button, LoadingState, Screen } from '@/components/ui';
 import { BreakSelector, formatSessionBreak } from '@/features/attendance/BreakSelector';
-import { workDateToUtc } from '@/features/attendance/attendancePresentation';
 import { useAttendance } from '@/features/attendance/useAttendance';
 import { useElapsedSeconds } from '@/features/attendance/useElapsedSeconds';
 import { DateTimeField } from '@/features/setup/DateTimeField';
 import { useSetup } from '@/features/setup/useSetup';
 import { calculateAttendanceDurations, formatDuration } from '@/services/attendanceCalculations.js';
 import { colors, fontFamilies, layout, radius, spacing } from '@/theme';
-import type { AttendanceSession, DateFormat } from '@/types/models';
-import { getZonedDateTimeParts, toWorkDate, zonedDateTimeToUtc } from '@/utils/time';
+import type { AttendanceSession } from '@/types/models';
+import { formatWorkDate, getZonedDateTimeParts, toWorkDate, zonedDateTimeToUtc } from '@/utils/time';
+
+const sessionDateStyle = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' } as const;
 
 function InfoRow({ label, value, emphasized = false }: { label: string; value: string; emphasized?: boolean }) {
   return (
@@ -26,17 +27,6 @@ function InfoRow({ label, value, emphasized = false }: { label: string; value: s
       <Text style={[styles.infoValue, emphasized && styles.creditedValue]}>{value}</Text>
     </View>
   );
-}
-
-function formatWorkDate(workDate: string, preference: DateFormat) {
-  const date = workDateToUtc(workDate);
-  const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' } as const;
-  if (preference === 'ymd') {
-    const parts = new Intl.DateTimeFormat('en-US', options).formatToParts(date);
-    const fields = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-    return `${fields.weekday}, ${fields.year} ${fields.month} ${fields.day}`;
-  }
-  return new Intl.DateTimeFormat(preference === 'dmy' ? 'en-GB' : 'en-US', options).format(date);
 }
 
 function buildTimeOutReview(session: AttendanceSession, clockOutAt: Date) {
@@ -200,7 +190,7 @@ export function ActiveTimerScreen() {
     const clock = (exact ? reviewClockFormat : clockFormat).format(new Date(date));
     if (!workDate) return clock;
     const clockDate = toWorkDate(date, timezone);
-    return clockDate === workDate ? clock : `${formatWorkDate(clockDate, dateFormat)} · ${clock}`;
+    return clockDate === workDate ? clock : `${formatWorkDate(clockDate, dateFormat, sessionDateStyle)} · ${clock}`;
   };
 
   const recoveryPreview = useMemo(() => {
@@ -315,7 +305,7 @@ export function ActiveTimerScreen() {
       {status !== 'loading' && activeSession ? (
         <>
           <SessionReadout key={activeSession.id} session={activeSession} visible={visible && !review}
-            recovery={isStale} review={review ?? recoveryPreview} workDate={formatWorkDate(activeSession.workDate, dateFormat)}
+            recovery={isStale} review={review ?? recoveryPreview} workDate={formatWorkDate(activeSession.workDate, dateFormat, sessionDateStyle)}
             timeIn={clockLabel(activeSession.clockInAt, activeSession.workDate)} motion={motion} />
 
           <View style={styles.breakSection}>

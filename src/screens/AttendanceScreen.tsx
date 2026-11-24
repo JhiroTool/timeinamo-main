@@ -70,6 +70,7 @@ export function AttendanceScreen() {
   const month = selectedDate.slice(0, 7);
   const { status, result, hasResult, load } = useAttendanceHistory(month);
   const hour12 = setup?.workSettings.timeFormat !== '24h';
+  const dateFormat = setup?.workSettings.dateFormat ?? 'mdy';
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
@@ -123,7 +124,7 @@ export function AttendanceScreen() {
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <RecordRow record={item} timeRange={formatTimeRange(item)}
-            title={formatAttendanceDate(item.workDate, shortDate)}
+            title={formatAttendanceDate(item.workDate, shortDate, dateFormat)}
             onPress={() => openRecord(item.id)} />
         )}
         ListHeaderComponent={
@@ -163,12 +164,12 @@ export function AttendanceScreen() {
                 </Text>
               </View>
             </View>
-            <AttendanceCalendar month={month} today={today} selectedDate={selectedDate}
+            <AttendanceCalendar month={month} today={today} selectedDate={selectedDate} dateFormat={dateFormat}
               recordsByDate={recordsByDate} onSelect={setSelectedDate}
               onPrevious={() => moveMonth(-1)} onNext={month < currentMonth ? () => moveMonth(1) : undefined} />
 
             <View style={styles.selectedDay}>
-              <Text accessibilityRole="header" style={styles.selectedTitle}>{formatAttendanceDate(selectedDate, fullDate)}</Text>
+              <Text accessibilityRole="header" style={styles.selectedTitle}>{formatAttendanceDate(selectedDate, fullDate, dateFormat)}</Text>
               {selectedRecord ? (
                 <RecordRow record={selectedRecord} title="View record" timeRange={formatTimeRange(selectedRecord)}
                   onPress={() => openRecord(selectedRecord.id)} />

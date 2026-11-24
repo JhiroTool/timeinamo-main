@@ -24,21 +24,12 @@ import { useSetup } from '@/features/setup/useSetup';
 import { formatDuration } from '@/services/attendanceCalculations.js';
 import { calculateOjtProgress } from '@/services/ojtProgressCalculations.js';
 import { colors, fontFamilies, layout, radius, spacing } from '@/theme';
-import { getZonedDateTimeParts, toWorkDate } from '@/utils/time';
+import { formatWorkDate, getZonedDateTimeParts, toWorkDate } from '@/utils/time';
 
-const recordDateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  timeZone: 'UTC',
-});
+const headerDateStyle = { weekday: 'short', month: 'short', day: 'numeric' } as const;
 
 function compactHours(seconds: number): string {
   return `${(seconds / 3600).toLocaleString('en-US', { maximumFractionDigits: 1 })} h`;
-}
-
-function formatRecordDate(workDate: string): string {
-  return recordDateFormatter.format(new Date(`${workDate}T00:00:00.000Z`));
 }
 
 function greetingForHour(hour: number): string {
@@ -98,7 +89,7 @@ export function HomeScreen() {
   const [isForeground, setIsForeground] = useState(() => AppState.currentState === 'active');
   const isVisible = isFocused && isForeground;
   const { data: setup } = useSetup();
-  const { activeSession, recentSessions, operation, timeIn } = useAttendance();
+  const { activeSession, operation, timeIn } = useAttendance();
   const timezone = setup?.workSettings.timezone ?? 'Asia/Manila';
   const { status, data, error, load } = useOjtInsights(timezone);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -107,6 +98,7 @@ export function HomeScreen() {
   const today = toWorkDate(now, timezone);
   const firstName = setup?.profile.fullName.trim().split(/\s+/)[0] ?? '';
   const hour12 = setup?.workSettings.timeFormat !== '24h';
+  const dateFormat = setup?.workSettings.dateFormat ?? 'mdy';
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => setIsForeground(state === 'active'));
@@ -134,11 +126,7 @@ export function HomeScreen() {
   }, [isVisible, load, today, timezone]);
 
   const snapshot = data?.today?.workDate === today ? data.today : null;
-  const todayRecord = activeSession?.workDate === today
-    ? activeSession
-    : snapshot && snapshot.status !== 'completed'
-      ? (recentSessions.find((record) => record.id === snapshot.id) ?? snapshot)
-      : snapshot;
+  const todayRecord = activeSession?.workDate === today ? activeSession : snapshot;
   const session = activeSession ?? todayRecord;
   const completed = todayRecord?.status === 'completed';
   const isLiveToday = todayRecord !== null && !completed;
@@ -167,12 +155,6 @@ export function HomeScreen() {
     minute: '2-digit',
     hour12,
   }), [timezone, hour12]);
-  const dateFormatter = useMemo(() => new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  }), [timezone]);
   const greeting = greetingForHour(Number(getZonedDateTimeParts(now, timezone).time.slice(0, 2)));
 
   function formatTime(value: string | null | undefined) {
@@ -215,12 +197,12 @@ export function HomeScreen() {
           <View style={styles.brand}>
             <Image
               resizeMode="cover"
-              source={require('../../assets/images/TI LOGO.png')}
+              source={require('../../assets/images/TI LOGO 96.png')}
               style={styles.logo}
             />
             <Text style={styles.brandName}>TimeInamo</Text>
           </View>
-          <Text style={styles.headerDate}>{dateFormatter.format(now)}</Text>
+          <Text style={styles.headerDate}>{formatWorkDate(today, dateFormat, headerDateStyle)}</Text>
         </View>
         <Text accessibilityRole="header" numberOfLines={2} style={styles.greeting}>
           {greeting}{firstName ? `, ${firstName}` : ''}
@@ -277,7 +259,7 @@ export function HomeScreen() {
               state={actionState}
             />
             {needsReview && session ? (
-              <Text style={styles.recoveryNote}>Time Out needed for {formatRecordDate(session.workDate)}</Text>
+              <Text style={styles.recoveryNote}>Time Out needed for {formatWorkDate(session.workDate, dateFormat)}</Text>
             ) : null}
             {actionError ? (
               <Text accessibilityLiveRegion="assertive" style={[styles.errorText, styles.actionError]}>{actionError}</Text>
@@ -325,7 +307,7 @@ export function HomeScreen() {
                     style={({ pressed }) => [styles.recentRow, pressed && styles.pressed]}
                   >
                     <View style={styles.recentCopy}>
-                      <Text style={styles.recentDate}>{formatRecordDate(record.workDate)}</Text>
+                      <Text style={styles.recentDate}>{formatWorkDate(record.workDate, dateFormat)}</Text>
                       <Text style={styles.recentTime}>{formatTime(record.clockInAt)} – {formatTime(record.clockOutAt)}</Text>
                     </View>
                     <View style={styles.recentSummary}>
