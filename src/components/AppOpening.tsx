@@ -1,26 +1,34 @@
 import { isRunningInExpoGo } from 'expo';
 import * as SplashScreen from 'expo-splash-screen';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useReducedMotion,
-  useSharedValue, withTiming,
+  cancelAnimation,
+  Easing,
+  ReduceMotion,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Line } from 'react-native-svg';
 
 import { fontFamilies, spacing } from '@/theme';
 
 const logo = require('../../assets/images/TI LOGO 432.png');
-const logoWidth = 132;
+const nativeLogoWidth = 144;
 const revealDuration = 3800;
-const exitDuration = 450;
-const nativeFadeDuration = 120;
+const exitDuration = 420;
+const nativeFadeDuration = 100;
 const openingBackground = '#FFFFFF';
 const wordmarkColor = '#0F172A';
 const taglineColor = '#64748B';
 const accentColor = '#0F766E';
+const accentDark = '#115E59';
+const accentMedium = '#70C7BE';
 const accentSoft = '#CCFBF1';
 const exitEasing = Easing.inOut(Easing.cubic);
 const isExpoGo = isRunningInExpoGo();
@@ -45,13 +53,26 @@ function hideNativeSplashOnce(reduceMotion: boolean) {
       if (__DEV__) console.warn('TimeInamo could not hide the native splash.', error);
     });
   }
-  return nativeHide;
+  return nativeHide!;
+}
+
+function progressBetween(time: number, start: number, end: number) {
+  'worklet';
+  return Math.max(0, Math.min(1, (time - start) / (end - start)));
 }
 
 function easeOutBetween(time: number, start: number, end: number) {
   'worklet';
-  const fraction = Math.max(0, Math.min(1, (time - start) / (end - start)));
+  const fraction = progressBetween(time, start, end);
   return 1 - (1 - fraction) ** 3;
+}
+
+function easeInOutBetween(time: number, start: number, end: number) {
+  'worklet';
+  const fraction = progressBetween(time, start, end);
+  return fraction < 0.5
+    ? 4 * fraction ** 3
+    : 1 - (-2 * fraction + 2) ** 3 / 2;
 }
 
 export function AppOpening({ ready, fontsReady, onFinish }: {
@@ -63,13 +84,36 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [nativeReleased, setNativeReleased] = useState(false);
   const [revealComplete, setRevealComplete] = useState(false);
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = Boolean(useReducedMotion());
   const timeline = useSharedValue(0);
   const opacity = useSharedValue(1);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const imageSize = Math.max(72, Math.min(logoWidth, width - insets.left - insets.right - 48, height * 0.36));
+  const imageSize = Math.max(
+    72,
+    Math.min(nativeLogoWidth, width - insets.left - insets.right - 72, height * 0.25),
+  );
   const copyWidth = Math.min(384, width - insets.left - insets.right - 40);
+  const dialSize = imageSize + 92;
+  const constructionWidth = Math.min(dialSize + 104, copyWidth);
+  const dialRadius = dialSize / 2 - 12;
+  const orbitRadius = dialRadius - 2;
+  const dialCircumference = 2 * Math.PI * dialRadius;
+  const orbitCircumference = 2 * Math.PI * orbitRadius;
+  const ticks = useMemo(() => Array.from({ length: 12 }, (_, index) => {
+    const angle = index * 30 * Math.PI / 180;
+    const outer = dialRadius + 4;
+    const inner = outer - (index % 3 === 0 ? 7 : 4);
+    const center = dialSize / 2;
+    return {
+      key: index,
+      x1: center + Math.sin(angle) * inner,
+      y1: center - Math.cos(angle) * inner,
+      x2: center + Math.sin(angle) * outer,
+      y2: center - Math.cos(angle) * outer,
+      strong: index % 3 === 0,
+    };
+  }), [dialRadius, dialSize]);
 
   useEffect(() => {
     if (!laidOut || !imageLoaded || !fontsReady) return;
@@ -88,8 +132,7 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
   const markRevealComplete = useCallback(() => setRevealComplete(true), []);
 
   useEffect(() => {
-    if (!nativeReleased) return;
-    if (reduceMotion) return;
+    if (!nativeReleased || reduceMotion) return;
 
     timeline.set(withTiming(revealDuration, {
       duration: revealDuration,
@@ -118,72 +161,93 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
   }, [nativeReleased, onFinish, opacity, ready, reduceMotion, revealComplete]);
 
   const cover = useAnimatedStyle(() => ({ opacity: opacity.get() }));
-  const mark = useAnimatedStyle(() => {
+  const construction = useAnimatedStyle(() => {
     const time = timeline.get();
-    const arrival = easeOutBetween(time, 700, 1500);
-    const settle = easeOutBetween(time, 1500, 2200);
+    const arrive = easeOutBetween(time, 0, 720);
+    const depart = easeInOutBetween(time, 2860, 3540);
     return {
-      opacity: reduceMotion || !isExpoGo ? 1 : arrival,
-      transform: [{
-        scale: reduceMotion || !isExpoGo
-          ? 1
-          : 0.94 + 0.04 * arrival + 0.02 * settle,
-      }],
+      opacity: reduceMotion ? 0 : 0.72 * arrive * (1 - depart),
+      transform: [{ scaleX: arrive }],
     };
   });
-  const ring = useAnimatedStyle(() => {
+  const constructionEnd = useAnimatedStyle(() => {
     const time = timeline.get();
-    const reveal = easeOutBetween(time, 300, 1100);
-    const breathe = 1 + 0.018 * Math.sin(Math.min(time, 2200) / 220);
+    const arrive = easeOutBetween(time, 220, 880);
+    const depart = easeInOutBetween(time, 2860, 3540);
     return {
-      opacity: reduceMotion ? 0 : reveal * (1 - easeOutBetween(time, 3100, 3800)),
-      transform: [{ scale: reduceMotion ? 1 : breathe }],
+      opacity: reduceMotion ? 0 : 0.5 * arrive * (1 - depart),
+      transform: [{ scaleX: arrive }],
+    };
+  });
+  const dial = useAnimatedStyle(() => {
+    const time = timeline.get();
+    const reveal = easeOutBetween(time, 280, 1120);
+    const retreat = easeInOutBetween(time, 2920, 3640);
+    return {
+      opacity: reduceMotion ? 0 : reveal * (1 - 0.72 * retreat),
+      transform: [{ scale: 0.96 + 0.04 * reveal }],
+    };
+  });
+  const pulse = useAnimatedStyle(() => {
+    const time = timeline.get();
+    const beat = easeOutBetween(time, 1180, 2060);
+    return {
+      opacity: reduceMotion ? 0 : 0.28 * (1 - beat),
+      transform: [{ scale: 0.78 + 0.42 * beat }],
+    };
+  });
+  const mark = useAnimatedStyle(() => {
+    const time = timeline.get();
+    const reveal = easeOutBetween(time, 420, 1460);
+    const nativeContinuity = isExpoGo ? 0 : 1 - easeInOutBetween(time, 80, 620);
+    const visibility = Math.max(reveal, nativeContinuity);
+    return {
+      opacity: reduceMotion ? 1 : visibility,
+      transform: [{ scale: reduceMotion ? 1 : 0.92 + 0.08 * visibility }],
     };
   });
   const sweepDot = useAnimatedStyle(() => {
-    const progress = easeOutBetween(timeline.get(), 900, 2600);
-    const angle = -90 + 220 * progress;
-    const radians = angle * Math.PI / 180;
-    const radius = 82;
+    const time = timeline.get();
+    const travel = easeInOutBetween(time, 860, 2480);
+    const angle = (-96 + 246 * travel) * Math.PI / 180;
+    const appear = easeOutBetween(time, 760, 1040);
+    const depart = easeInOutBetween(time, 2640, 3180);
     return {
-      opacity: easeOutBetween(timeline.get(), 900, 1100) * (1 - easeOutBetween(timeline.get(), 3000, 3400)),
+      opacity: reduceMotion ? 0 : appear * (1 - depart),
       transform: [
-        { translateX: Math.cos(radians) * radius },
-        { translateY: Math.sin(radians) * radius },
+        { translateX: Math.cos(angle) * orbitRadius },
+        { translateY: Math.sin(angle) * orbitRadius },
+        { scale: 0.75 + 0.25 * appear },
       ],
     };
   });
-  const horizontalLine = useAnimatedStyle(() => {
-    const reveal = easeOutBetween(timeline.get(), 0, 800);
+  const wordmark = useAnimatedStyle(() => {
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 1840, 2660);
     return {
-      opacity: 0.5 * reveal * (1 - easeOutBetween(timeline.get(), 3000, 3800)),
-      transform: [{ scaleX: reveal }],
+      opacity: reveal,
+      transform: [{ translateY: 10 * (1 - reveal) }],
     };
   });
-  const wordmark = useAnimatedStyle(() => {
-    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 1800, 2700);
-    return { opacity: reveal, transform: [{ translateY: 12 * (1 - reveal) }] };
-  });
   const tagline = useAnimatedStyle(() => {
-    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 2400, 3200);
-    return { opacity: reveal, transform: [{ translateY: 8 * (1 - reveal) }] };
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 2380, 3160);
+    return {
+      opacity: reveal,
+      transform: [{ translateY: 7 * (1 - reveal) }],
+    };
   });
 
-  const ringSize = imageSize + 64;
-  const ringRadius = ringSize / 2 - 5;
-  const ringCircumference = 2 * Math.PI * ringRadius;
   const primaryArc = useAnimatedProps(() => {
-    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 500, 1450);
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 420, 1460);
     return {
-      strokeDashoffset: ringCircumference * (1 - reveal * 0.68),
-      strokeOpacity: 0.9,
+      strokeDashoffset: dialCircumference * 0.66 * (1 - reveal),
+      strokeOpacity: 0.92,
     };
   });
   const progressArc = useAnimatedProps(() => {
-    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 1100, 2600);
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 920, 2460);
     return {
-      strokeDashoffset: ringCircumference * (1 - reveal * 0.36),
-      strokeOpacity: 0.48,
+      strokeDashoffset: orbitCircumference * 0.31 * (1 - reveal),
+      strokeOpacity: 0.58,
     };
   });
 
@@ -191,48 +255,71 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
     <Animated.View
       accessibilityLabel="TimeInamo. Track Time. Record Progress."
       accessibilityRole="progressbar"
+      accessibilityValue={{ text: 'Starting TimeInamo' }}
       accessible
       onLayout={() => setLaidOut(true)}
       style={[styles.cover, cover]}
     >
       <View style={[styles.lockup, { width: copyWidth }]}>
-        <Animated.View pointerEvents="none" style={[styles.horizontalLine, horizontalLine]} />
-        <View style={{ width: ringSize, height: ringSize, alignItems: 'center', justifyContent: 'center' }}>
-          <Animated.View pointerEvents="none" style={[styles.ringField, ring, { width: ringSize, height: ringSize }]}>
-            <Svg height={ringSize} width={ringSize}>
+        <View pointerEvents="none" style={[styles.constructionField, { width: constructionWidth }]}>
+          <Animated.View style={[styles.constructionLine, construction]} />
+          <Animated.View style={[styles.constructionLine, styles.constructionLineEnd, constructionEnd]} />
+          <Animated.View style={[styles.guideDot, styles.guideDotLeft, construction]} />
+          <Animated.View style={[styles.guideDot, styles.guideDotRight, constructionEnd]} />
+        </View>
+
+        <View style={[styles.dialStage, { width: dialSize, height: dialSize }]}>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.pulseRing, pulse, { width: dialSize - 24, height: dialSize - 24 }]}
+          />
+          <Animated.View pointerEvents="none" style={[styles.dial, dial, { width: dialSize, height: dialSize }]}>
+            <Svg height={dialSize} width={dialSize}>
               <Circle
-                cx={ringSize / 2}
-                cy={ringSize / 2}
+                cx={dialSize / 2}
+                cy={dialSize / 2}
                 fill="none"
-                r={ringRadius}
+                r={dialRadius}
                 stroke={accentSoft}
                 strokeWidth={1}
               />
+              {ticks.map((tick) => (
+                <Line
+                  key={tick.key}
+                  stroke={tick.strong ? accentMedium : accentSoft}
+                  strokeLinecap="round"
+                  strokeWidth={tick.strong ? 1.4 : 1}
+                  x1={tick.x1}
+                  x2={tick.x2}
+                  y1={tick.y1}
+                  y2={tick.y2}
+                />
+              ))}
               <AnimatedCircle
                 animatedProps={primaryArc}
-                cx={ringSize / 2}
-                cy={ringSize / 2}
+                cx={dialSize / 2}
+                cy={dialSize / 2}
                 fill="none"
-                origin={`${ringSize / 2}, ${ringSize / 2}`}
-                r={ringRadius}
-                rotation="-90"
+                origin={`${dialSize / 2}, ${dialSize / 2}`}
+                r={dialRadius}
+                rotation="-92"
                 stroke={accentColor}
-                strokeDasharray={`${ringCircumference * 0.68} ${ringCircumference}`}
+                strokeDasharray={`${dialCircumference * 0.66} ${dialCircumference}`}
                 strokeLinecap="round"
-                strokeWidth={1.5}
+                strokeWidth={1.7}
               />
               <AnimatedCircle
                 animatedProps={progressArc}
-                cx={ringSize / 2}
-                cy={ringSize / 2}
+                cx={dialSize / 2}
+                cy={dialSize / 2}
                 fill="none"
-                origin={`${ringSize / 2}, ${ringSize / 2}`}
-                r={ringRadius + 8}
-                rotation="-24"
-                stroke="#99D5CF"
-                strokeDasharray={`${ringCircumference * 0.36} ${ringCircumference}`}
+                origin={`${dialSize / 2}, ${dialSize / 2}`}
+                r={orbitRadius}
+                rotation="-28"
+                stroke={accentMedium}
+                strokeDasharray={`${orbitCircumference * 0.31} ${orbitCircumference}`}
                 strokeLinecap="round"
-                strokeWidth={1}
+                strokeWidth={1.1}
               />
             </Svg>
             <Animated.View
@@ -240,23 +327,29 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
               style={[
                 styles.sweepDot,
                 sweepDot,
-                { left: ringSize / 2 - 2.5, top: ringSize / 2 - 2.5 },
+                { left: dialSize / 2 - 3, top: dialSize / 2 - 3 },
               ]}
             />
           </Animated.View>
-          <Animated.Image
-            accessible={false}
-            fadeDuration={0}
-            onError={() => setImageLoaded(true)}
-            onLoad={() => setImageLoaded(true)}
-            resizeMode="contain"
-            source={logo}
-            style={[styles.logo, mark, { width: imageSize, height: imageSize }]}
-          />
+
+          <View pointerEvents="none" style={styles.logoField}>
+            <Animated.Image
+              accessible={false}
+              fadeDuration={0}
+              onError={() => setImageLoaded(true)}
+              onLoad={() => setImageLoaded(true)}
+              resizeMode="contain"
+              source={logo}
+              style={[styles.logo, mark, { width: imageSize, height: imageSize }]}
+            />
+          </View>
         </View>
+
         {fontsReady ? (
           <View style={styles.copy}>
-            <Animated.Text maxFontSizeMultiplier={1.65} style={[styles.wordmark, wordmark]}>TimeInamo</Animated.Text>
+            <Animated.Text maxFontSizeMultiplier={1.65} style={[styles.wordmark, wordmark]}>
+              TimeInamo
+            </Animated.Text>
             <Animated.Text maxFontSizeMultiplier={1.65} style={[styles.tagline, tagline]}>
               Track Time. Record Progress.
             </Animated.Text>
@@ -270,34 +363,67 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
 const styles = StyleSheet.create({
   cover: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: openingBackground,
     alignItems: 'center',
+    backgroundColor: openingBackground,
     justifyContent: 'center',
     zIndex: 1,
   },
   lockup: { alignItems: 'center', justifyContent: 'center' },
-  horizontalLine: {
-    position: 'absolute',
-    top: -20,
-    width: 104,
+  constructionField: {
+    height: 34,
+    justifyContent: 'space-between',
+    marginBottom: -17,
+    zIndex: 2,
+  },
+  constructionLine: {
+    alignSelf: 'center',
+    backgroundColor: accentColor,
     height: 1,
-    backgroundColor: accentColor,
-    transformOrigin: 'center',
+    width: '100%',
   },
-  ringField: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  sweepDot: {
+  constructionLineEnd: {
+    alignSelf: 'flex-end',
+    backgroundColor: accentMedium,
+    width: '66%',
+  },
+  guideDot: {
+    backgroundColor: accentDark,
+    borderRadius: 2,
+    height: 3,
     position: 'absolute',
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: accentColor,
+    top: -1,
+    width: 3,
   },
-  logo: { width: '100%', height: '100%' },
+  guideDotLeft: { left: 0 },
+  guideDotRight: { bottom: -1, right: '17%', top: undefined },
+  dialStage: { alignItems: 'center', justifyContent: 'center' },
+  dial: { alignItems: 'center', justifyContent: 'center', position: 'absolute' },
+  pulseRing: {
+    borderColor: accentSoft,
+    borderRadius: 999,
+    borderWidth: 1,
+    position: 'absolute',
+  },
+  sweepDot: {
+    backgroundColor: accentColor,
+    borderColor: openingBackground,
+    borderRadius: 4,
+    borderWidth: 1,
+    height: 7,
+    position: 'absolute',
+    width: 7,
+  },
+  logoField: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+  },
+  logo: { height: '100%', width: '100%' },
   copy: {
+    alignItems: 'center',
+    gap: spacing.xs,
     height: 78,
     marginTop: spacing.sm,
-    gap: spacing.xs,
-    alignItems: 'center',
   },
   wordmark: {
     color: wordmarkColor,

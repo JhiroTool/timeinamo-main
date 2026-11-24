@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeInamo",
     "slug": "timeinamo",
-    "version": "1.0.0-beta.1",
+    "version": "1.0.0-beta.2",
     "icon": "./assets/images/TI ICON.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "app.timeinamo.mobile",
-      "versionCode": 1,
+      "versionCode": 2,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
