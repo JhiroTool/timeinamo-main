@@ -34,7 +34,13 @@
           "image": "./assets/images/TI LOGO 432.png",
           "imageWidth": 144,
           "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF"
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/images/TI LOGO 432.png",
+            "imageWidth": 144,
+            "resizeMode": "contain",
+            "backgroundColor": "#FFFFFF"
+          }
         }
       ],
       "expo-sqlite",

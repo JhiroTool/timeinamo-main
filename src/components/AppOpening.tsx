@@ -3,17 +3,19 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
+  cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useReducedMotion,
+  useSharedValue, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
+import Svg, { Circle } from 'react-native-svg';
 
 import { fontFamilies, spacing } from '@/theme';
 
 const logo = require('../../assets/images/TI LOGO 432.png');
-const logoWidth = 144;
-const revealDuration = 2700;
-const exitDuration = 500;
+const logoWidth = 132;
+const revealDuration = 3800;
+const exitDuration = 450;
 const nativeFadeDuration = 120;
 const openingBackground = '#FFFFFF';
 const wordmarkColor = '#0F172A';
@@ -23,6 +25,7 @@ const accentSoft = '#CCFBF1';
 const exitEasing = Easing.inOut(Easing.cubic);
 const isExpoGo = isRunningInExpoGo();
 let nativeHide: Promise<void> | undefined;
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 // Claim the native splash before Expo Router can automatically dismiss it.
 void SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
@@ -117,29 +120,72 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
   const cover = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   const mark = useAnimatedStyle(() => {
     const time = timeline.get();
-    const arrival = easeOutBetween(time, 0, 700);
-    // Installed builds inherit the same mark from the native splash. Expo Go cannot,
-    // so its custom opening performs the full logo entrance here.
+    const arrival = easeOutBetween(time, 700, 1500);
+    const settle = easeOutBetween(time, 1500, 2200);
     return {
       opacity: reduceMotion || !isExpoGo ? 1 : arrival,
-      transform: [{ scale: reduceMotion || !isExpoGo ? 1 : 0.9 + 0.1 * arrival }],
+      transform: [{
+        scale: reduceMotion || !isExpoGo
+          ? 1
+          : 0.94 + 0.04 * arrival + 0.02 * settle,
+      }],
     };
   });
-  const accent = useAnimatedStyle(() => {
+  const ring = useAnimatedStyle(() => {
     const time = timeline.get();
-    const expansion = easeOutBetween(time, 700, 1400);
+    const reveal = easeOutBetween(time, 300, 1100);
+    const breathe = 1 + 0.018 * Math.sin(Math.min(time, 2200) / 220);
     return {
-      opacity: reduceMotion ? 0 : 0.42 * easeOutBetween(time, 700, 850) * (1 - easeOutBetween(time, 1150, 1400)),
-      transform: [{ scale: 1 + 0.18 * expansion }],
+      opacity: reduceMotion ? 0 : reveal * (1 - easeOutBetween(time, 3100, 3800)),
+      transform: [{ scale: reduceMotion ? 1 : breathe }],
+    };
+  });
+  const sweepDot = useAnimatedStyle(() => {
+    const progress = easeOutBetween(timeline.get(), 900, 2600);
+    const angle = -90 + 220 * progress;
+    const radians = angle * Math.PI / 180;
+    const radius = 82;
+    return {
+      opacity: easeOutBetween(timeline.get(), 900, 1100) * (1 - easeOutBetween(timeline.get(), 3000, 3400)),
+      transform: [
+        { translateX: Math.cos(radians) * radius },
+        { translateY: Math.sin(radians) * radius },
+      ],
+    };
+  });
+  const horizontalLine = useAnimatedStyle(() => {
+    const reveal = easeOutBetween(timeline.get(), 0, 800);
+    return {
+      opacity: 0.5 * reveal * (1 - easeOutBetween(timeline.get(), 3000, 3800)),
+      transform: [{ scaleX: reveal }],
     };
   });
   const wordmark = useAnimatedStyle(() => {
-    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 1400, 2200);
-    return { opacity: reveal, transform: [{ translateY: 10 * (1 - reveal) }] };
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 1800, 2700);
+    return { opacity: reveal, transform: [{ translateY: 12 * (1 - reveal) }] };
   });
-  const tagline = useAnimatedStyle(() => ({
-    opacity: reduceMotion ? 1 : easeOutBetween(timeline.get(), 2200, 2700),
-  }));
+  const tagline = useAnimatedStyle(() => {
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 2400, 3200);
+    return { opacity: reveal, transform: [{ translateY: 8 * (1 - reveal) }] };
+  });
+
+  const ringSize = imageSize + 64;
+  const ringRadius = ringSize / 2 - 5;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const primaryArc = useAnimatedProps(() => {
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 500, 1450);
+    return {
+      strokeDashoffset: ringCircumference * (1 - reveal * 0.68),
+      strokeOpacity: 0.9,
+    };
+  });
+  const progressArc = useAnimatedProps(() => {
+    const reveal = reduceMotion ? 1 : easeOutBetween(timeline.get(), 1100, 2600);
+    return {
+      strokeDashoffset: ringCircumference * (1 - reveal * 0.36),
+      strokeOpacity: 0.48,
+    };
+  });
 
   return (
     <Animated.View
@@ -149,9 +195,55 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
       onLayout={() => setLaidOut(true)}
       style={[styles.cover, cover]}
     >
-      <View style={[styles.lockup, { width: copyWidth, height: imageSize }]}>
-        <View style={{ width: imageSize, height: imageSize }}>
-          <Animated.View pointerEvents="none" style={[styles.accent, accent]} />
+      <View style={[styles.lockup, { width: copyWidth }]}>
+        <Animated.View pointerEvents="none" style={[styles.horizontalLine, horizontalLine]} />
+        <View style={{ width: ringSize, height: ringSize, alignItems: 'center', justifyContent: 'center' }}>
+          <Animated.View pointerEvents="none" style={[styles.ringField, ring, { width: ringSize, height: ringSize }]}>
+            <Svg height={ringSize} width={ringSize}>
+              <Circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                fill="none"
+                r={ringRadius}
+                stroke={accentSoft}
+                strokeWidth={1}
+              />
+              <AnimatedCircle
+                animatedProps={primaryArc}
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                fill="none"
+                origin={`${ringSize / 2}, ${ringSize / 2}`}
+                r={ringRadius}
+                rotation="-90"
+                stroke={accentColor}
+                strokeDasharray={`${ringCircumference * 0.68} ${ringCircumference}`}
+                strokeLinecap="round"
+                strokeWidth={1.5}
+              />
+              <AnimatedCircle
+                animatedProps={progressArc}
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                fill="none"
+                origin={`${ringSize / 2}, ${ringSize / 2}`}
+                r={ringRadius + 8}
+                rotation="-24"
+                stroke="#99D5CF"
+                strokeDasharray={`${ringCircumference * 0.36} ${ringCircumference}`}
+                strokeLinecap="round"
+                strokeWidth={1}
+              />
+            </Svg>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.sweepDot,
+                sweepDot,
+                { left: ringSize / 2 - 2.5, top: ringSize / 2 - 2.5 },
+              ]}
+            />
+          </Animated.View>
           <Animated.Image
             accessible={false}
             fadeDuration={0}
@@ -159,7 +251,7 @@ export function AppOpening({ ready, fontsReady, onFinish }: {
             onLoad={() => setImageLoaded(true)}
             resizeMode="contain"
             source={logo}
-            style={[styles.logo, mark]}
+            style={[styles.logo, mark, { width: imageSize, height: imageSize }]}
           />
         </View>
         {fontsReady ? (
@@ -183,25 +275,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
-  lockup: { alignItems: 'center' },
-  accent: {
+  lockup: { alignItems: 'center', justifyContent: 'center' },
+  horizontalLine: {
     position: 'absolute',
-    top: -7,
-    right: -7,
-    bottom: -7,
-    left: -7,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: accentColor,
-    backgroundColor: accentSoft,
+    top: -20,
+    width: 104,
+    height: 1,
+    backgroundColor: accentColor,
+    transformOrigin: 'center',
+  },
+  ringField: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  sweepDot: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: accentColor,
   },
   logo: { width: '100%', height: '100%' },
   copy: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    paddingTop: spacing.lg,
+    height: 78,
+    marginTop: spacing.sm,
     gap: spacing.xs,
     alignItems: 'center',
   },

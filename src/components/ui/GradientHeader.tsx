@@ -58,7 +58,7 @@ export function GradientHeader({
             <View style={styles.logoFrame}>
               <Image
                 accessibilityIgnoresInvertColors
-                resizeMode="cover"
+                resizeMode="contain"
                 source={require('../../../assets/images/TI LOGO.png')}
                 style={styles.logo}
               />
@@ -140,9 +140,7 @@ const styles = StyleSheet.create({
   logoFrame: {
     width: 36,
     height: 36,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
+    overflow: 'visible',
   },
   logo: { width: '100%', height: '100%' },
   brandText: { color: '#FFFFFF', fontSize: 22, lineHeight: 28, fontWeight: '700' },
