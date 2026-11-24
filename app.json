@@ -2,8 +2,8 @@
   "expo": {
     "name": "TimeInamo",
     "slug": "timeinamo",
-    "version": "0.1.0",
-    "icon": "./assets/images/TI LOGO.png",
+    "version": "1.0.0-beta.1",
+    "icon": "./assets/images/TI ICON.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#FFFFFF",
@@ -14,9 +14,16 @@
     },
     "android": {
       "package": "app.timeinamo.mobile",
+      "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.VIBRATE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/TI LOGO.png",
-        "backgroundColor": "#F7F9FC"
+        "foregroundImage": "./assets/images/TI ICON.png",
+        "backgroundColor": "#FFFFFF"
       }
     },
     "plugins": [
@@ -37,6 +44,17 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "02f33274-1094-47f8-829d-9f45b3075ec8"
+      }
+    },
+    "owner": "accelvivas"
   }
 }

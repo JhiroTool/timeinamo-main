@@ -1,6 +1,11 @@
 {
   "name": "timeinamo",
-  "version": "0.1.0",
+  "version": "1.0.0-beta.1",
+  "author": "Gian Accel Vivas and Jhiro Tool",
+  "contributors": [
+    "Gian Accel Vivas",
+    "Jhiro Tool"
+  ],
   "private": true,
   "type": "module",
   "main": "expo-router/entry",

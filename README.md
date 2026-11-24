@@ -1,100 +1,109 @@
-# TimeInamo
+<p align="center">
+  <img src="assets/images/TI%20ICON.png" alt="TimeInamo icon" width="144" />
+</p>
 
-TimeInamo is an offline-first personal Work and OJT tracker for Android and iOS. It is built with Expo, React Native, TypeScript, Expo Router, and SQLite. All user data stays in the app's local SQLite database unless the user explicitly exports a CSV file through the native share sheet.
+<h1 align="center">TimeInamo</h1>
 
-## MVP features
+<p align="center"><strong>Track Time. Record Progress.</strong></p>
 
-- Three-step first-run setup for personal details, schedule, required OJT hours, and timezone
-- Five bottom tabs: Home, Attendance, Journal, Progress, and Settings
-- Immediate Time In, a live `HH:MM:SS` timer, configurable unpaid break, and confirmed Time Out
-- Active-session restoration after app restart or foregrounding
-- Manual recovery for sessions that cross into another workday
-- Monthly attendance history with completed, incomplete, and adjusted filters
-- Manual attendance entry, corrections with audit history, and confirmed soft deletion
-- Daily journal CRUD, search, date filtering, optional notes, and optional attendance links
-- OJT totals, remaining hours, daily average, estimated remaining workdays, and weekly totals
-- Attendance CSV export for all records, the current month, or a custom range
-- Local-only settings and confirmed deletion of all local data
+TimeInamo is an offline-first personal work and OJT tracker for Android. It combines attendance recording, a persistent work-session timer, daily activity journaling, and progress reporting in one local workspace.
 
-## Requirements
+## Download TimeInamo
 
-- Node.js 22 or newer (the database validation script uses the built-in `node:sqlite` module)
+The verified Android beta download will be linked here after the APK has been uploaded to the GitHub prerelease.
+
+TimeInamo v1.0.0-beta.1 is intended for direct Android testing and is not distributed through Google Play.
+
+## Features
+
+- Time In and confirmed Time Out
+- Persistent work-session timer restored from saved timestamps
+- Unpaid-break deductions and credited-time calculations
+- Monthly attendance history, manual entries, and correction history
+- OJT completed hours, remaining hours, estimates, and weekly activity
+- Daily Activity Journal with search and date filtering
+- SQLite offline storage
+- CSV attendance export through the native share sheet
+- Personal profile, schedule, timezone, date, and time configuration
+
+## Technology
+
+- React Native 0.88
+- Expo SDK 58
+- TypeScript
+- SQLite through `expo-sqlite`
+- Expo Router
+- React Native Reanimated
+
+## Screenshots
+
+Genuine Android screenshots have not been committed yet because no Android device or emulator was connected during release preparation. They will be added after physical-device beta validation; mock or fabricated screenshots are intentionally not used.
+
+## Install the Android beta
+
+1. Open the verified APK download link in the Download section.
+2. Download the APK on an Android device.
+3. If Android requests it, allow installation from the browser or file manager you used.
+4. Open the downloaded APK and choose **Install**.
+5. Open TimeInamo.
+6. Complete the first-time setup.
+
+Android may display a warning for apps installed outside Google Play. Confirm that the APK came from this repository's official release before continuing.
+
+## Expo Go development
+
+Requirements:
+
+- Node.js 22 or newer
 - npm
-- Expo Go compatible with Expo SDK 58, or an SDK 58 development build
-- Android Studio/ADB for a local Android emulator build; Xcode is required for a local iOS build
+- Expo Go compatible with Expo SDK 58
 
-## Install and run
+Install and start the development server:
 
 ```sh
 npm install
-npm start
+npx expo start
 ```
 
-Scan the QR code with Expo Go while the computer and phone are on the same network. If LAN discovery is unavailable, run:
+Open Expo Go on Android and scan the QR code displayed by the Expo terminal or development page. The computer and phone must be able to reach each other on the same network. When LAN access is unavailable, use:
 
 ```sh
 npx expo start --tunnel
 ```
 
-Other useful commands:
+Expo Go runs the development project; it does not install or validate the standalone APK. TimeInamo currently uses native modules included by the matching Expo Go SDK, including SQLite, sharing, the date/time picker, Reanimated, and safe-area support. A future native dependency not bundled with Expo Go would require a custom development build.
 
-```sh
-npm run android
-npm run ios
-npm run typecheck
-npm run check:db
-npm run check
-```
-
-On Windows PowerShell, use `npm.cmd` or `npx.cmd` if script execution policy prevents the PowerShell shims:
-
-```powershell
-npm.cmd install
-npx.cmd expo start --tunnel
-npm.cmd run check
-```
-
-## Validation and production bundle checks
-
-The standard verification command runs strict TypeScript and the SQLite/integration checks:
+Useful checks:
 
 ```sh
 npm run check
+npx expo-doctor
 ```
 
-The database check applies every migration to a temporary SQLite file and verifies constraints, duplicate prevention, duration calculations, correction history, journal CRUD/search/restart persistence, completed-hour totals, weekly grouping, and CSV escaping/formula protection.
+## Offline data and privacy
 
-To verify an Android production JavaScript bundle without creating an APK:
+TimeInamo stores profile settings, attendance records, corrections, active sessions, and journal entries in a local SQLite database on the device. The application has no account system, cloud backend, analytics service, or automatic cloud synchronization.
 
-```sh
-npx expo export --platform android --output-dir .expo-check
-```
+CSV files are created only when the user requests an export and are passed to Android's native share/save interface. The SQLite database is not advertised as encrypted. Removing the app or using **Delete All Local Data** can permanently remove local records, so users should export important attendance data periodically.
 
-The generated `.expo-check` directory is disposable and should not be committed.
+## Known beta limitations
 
-## Data architecture
+- Single-user local workspace with no cloud backup or cross-device restore
+- One non-deleted attendance session per configured workday
+- Overnight sessions require manual Time Out recovery
+- Completion forecasts are estimates based on the configured schedule
+- CSV destinations depend on available Android share targets
+- Physical-device accessibility, battery, and long-session testing remains part of the beta program
 
-- `profiles` and `work_settings` hold the singleton local workspace and preferences.
-- `attendance_sessions` stores UTC timestamps and timezone-derived `YYYY-MM-DD` work dates.
-- `attendance_corrections` retains old/new values, reasons, and UTC correction timestamps.
-- `activity_logs` stores journal entries and optional attendance links.
-- Versioned migrations are recorded in both SQLite `user_version` and `schema_migrations`.
-- Foreign keys, partial unique indexes, and overlap triggers enforce attendance invariants.
-- Completed credited time is calculated in integer seconds as elapsed time minus unpaid break.
-- Active/incomplete and soft-deleted attendance records are excluded from completed totals.
+## Developers
 
-No user, attendance, or journal mock records are seeded.
+- Gian Accel Vivas
+- Jhiro Tool
 
-## CSV export safety
+## Version
 
-CSV files are generated locally in the Expo cache and passed directly to the native share/save sheet. Fields are escaped for quotes, commas, and line breaks. User-authored values beginning with spreadsheet formula characters are prefixed safely to reduce formula-injection risk.
+`v1.0.0-beta.1`
 
-## Known MVP limitations
+## License and distribution
 
-- TimeInamo is single-user and has no authentication, cloud sync, backup, or cross-device restore.
-- MVP permits one non-deleted attendance session per configured workday.
-- Overnight active sessions require manual Time Out recovery and are never closed automatically.
-- Schedule changes affect future defaults only; historical attendance is not recalculated.
-- Forecast workdays are estimates based on configured scheduled credited hours.
-- CSV saving destinations and available share targets depend on the device and installed apps.
-- Native share-sheet behavior, notification-free background behavior, screen-reader output, and exact small-device keyboard layout require validation on physical Android and iOS devices.
+This repository currently provides TimeInamo for beta evaluation and direct testing. No Google Play release is part of this beta workflow.
