@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeInamo",
     "slug": "timeinamo",
-    "version": "1.0.0-beta.2",
+    "version": "1.0.0-beta.3",
     "icon": "./assets/images/TI ICON.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "app.timeinamo.mobile",
-      "versionCode": 2,
+      "versionCode": 3,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
@@ -31,14 +31,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/TI LOGO 432.png",
-          "imageWidth": 144,
-          "resizeMode": "contain",
           "backgroundColor": "#FFFFFF",
           "dark": {
-            "image": "./assets/images/TI LOGO 432.png",
-            "imageWidth": 144,
-            "resizeMode": "contain",
             "backgroundColor": "#FFFFFF"
           }
         }
