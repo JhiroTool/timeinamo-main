@@ -10,7 +10,11 @@ TimeInamo is an offline-first personal work and OJT tracker for Android. It comb
 
 ## Download TimeInamo
 
-The verified Android beta download will be linked here after the APK has been uploaded to the GitHub prerelease.
+[**Download TimeInamo v1.0.0-beta.1 for Android (APK)**](https://github.com/JhiroTool/timeinamo-main/releases/download/v1.0.0-beta.1/TimeInamo-v1.0.0-beta.1.apk)
+
+SHA-256: `25a09bfec646a49959ff0beee594fa6a61432d48385dbf8dd1baed2b141cd7d1`
+
+This repository is currently private. The APK link requires a GitHub account with access to `JhiroTool/timeinamo-main`.
 
 TimeInamo v1.0.0-beta.1 is intended for direct Android testing and is not distributed through Google Play.
 
